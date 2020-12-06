@@ -119,6 +119,13 @@ impl EventHandler for HandlerWrapper {
             if this.config.tater_emoji != reaction.emoji {
                 return;
             }
+            if this
+                .config
+                .blacklisted_channels
+                .contains(&reaction.channel_id)
+            {
+                return;
+            }
             // ok this is a tater!
             let giver = reaction.user(&ctx.http).await?;
 
@@ -168,6 +175,13 @@ impl EventHandler for HandlerWrapper {
 
         let res: Result<(), SerenityError> = try {
             if this.config.tater_emoji != reaction.emoji {
+                return;
+            }
+            if this
+                .config
+                .blacklisted_channels
+                .contains(&reaction.channel_id)
+            {
                 return;
             }
             // ok this is a tater!
