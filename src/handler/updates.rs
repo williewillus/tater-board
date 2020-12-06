@@ -33,7 +33,7 @@ impl Updates {
 
 impl HandlerWrapper {
     /// Check if anything needs to be updated
-    pub async fn check_updates(&self, ctx: &Context) -> Result<(), String> {
+    pub async fn check_updates(&self, ctx: &Context) -> Result<(), anyhow::Error> {
         let mut updates = self.updates.lock().await;
         let now = Instant::now();
 
@@ -41,7 +41,8 @@ impl HandlerWrapper {
             // gotta save!
             println!("saving at {:?}", &now);
             updates.last_save = now;
-            HandlerWrapper::save(&self.save_dir_path, &*self.handlers.lock().await).await?;
+            let lock = self.handlers.lock().await;
+            HandlerWrapper::save_all(&self.save_dir_path, &*lock).await?;
         }
         if now.duration_since(updates.last_status_change) >= Updates::UPDATE_EVERY
             || updates.status_idx.is_none()

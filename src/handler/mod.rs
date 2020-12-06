@@ -3,13 +3,14 @@ mod updates;
 
 use std::{
     collections::{hash_map, HashMap, HashSet},
-    fs,
+    fs::File,
     path::Path,
     path::PathBuf,
     sync::Arc,
 };
 
-use fs::File;
+use anyhow::{anyhow, bail};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serenity::{
     async_trait,
@@ -25,6 +26,7 @@ use serenity::{
     },
     prelude::*,
 };
+
 use updates::Updates;
 
 /// Has an arc-muxed wrapper to the true handlers
@@ -40,23 +42,43 @@ pub struct HandlerWrapper {
 
 impl HandlerWrapper {
     /// Try to load from the given file, or just create default if it can't
-    pub fn new(save_path: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(save_path: PathBuf) -> Result<Self, anyhow::Error> {
         let map = match save_path.read_dir() {
             Ok(dir) => dir
+                // Map to only the file stems
                 .filter_map(|entry| {
-                    // let let let
                     let entry = entry.ok()?;
-                    let file = File::open(entry.path()).ok()?;
-                    let handler = serde_json::from_reader(file).ok()?;
-                    let file_path = PathBuf::from(entry.file_name());
-                    let guild_id = file_path.file_stem()?;
-                    let guild_id = GuildId(guild_id.to_string_lossy().parse().ok()?);
-                    println!("- loaded {}", &entry.file_name().to_string_lossy());
-                    Some((guild_id, handler))
+                    let path = entry.path();
+                    let stem = path.file_stem()?;
+                    let tostred = stem.to_string_lossy();
+                    Some(tostred.into_owned())
+                })
+                // Make unique
+                .unique()
+                // Now open up the files
+                .filter_map(|stem| {
+                    let id = stem.parse::<u64>().ok()?;
+
+                    let tater_filepath = format!("{}_taters.json", id);
+                    let tater_file = File::open(save_path.join(tater_filepath)).ok()?;
+                    let config_filepath = format!("{}_config.json", id);
+                    let config_file = File::open(save_path.join(config_filepath)).ok()?;
+
+                    let taters: HandlerButOnlyTaters = serde_json::from_reader(tater_file).ok()?;
+                    let config: Config = serde_json::from_reader(config_file).ok()?;
+                    Some((
+                        GuildId(id),
+                        Handler {
+                            config,
+                            tatered_messages: taters.tatered_messages,
+                            taters_given: taters.taters_given,
+                            taters_got: taters.taters_got,
+                        },
+                    ))
                 })
                 .collect(),
             Err(e) => {
-                return Err(Box::new(e));
+                bail!(e);
             }
         };
         Ok(Self {
@@ -67,20 +89,72 @@ impl HandlerWrapper {
         })
     }
 
-    /// save this to json
-    async fn save<P: AsRef<Path>>(
+    /// Save the taters only to json
+    async fn save_taters<P: AsRef<Path>>(
         path: P,
         handlers: &HashMap<GuildId, Handler>,
-    ) -> Result<(), String> {
-        handlers
-            .iter()
-            .map(|(id, handler)| {
-                let file = File::create(path.as_ref().join(format!("{}.json", id)))
-                    .map_err(|e| e.to_string())?;
-                serde_json::to_writer(file, handler).map_err(|e| e.to_string())
-            })
-            .collect::<Result<Vec<_>, String>>()
-            .map(|_| ())
+    ) -> Result<(), anyhow::Error> {
+        for (&id, _) in handlers.iter() {
+            HandlerWrapper::save_server_taters(&path, &handlers, id).await?
+        }
+
+        Ok(())
+    }
+
+    /// Save one server's taters to json
+    async fn save_server_taters<P: AsRef<Path>>(
+        path: P,
+        handlers: &HashMap<GuildId, Handler>,
+        guild: GuildId,
+    ) -> Result<(), anyhow::Error> {
+        let handler = handlers
+            .get(&guild)
+            .ok_or_else(|| anyhow!("Guild id {} didn't exist somehow", guild.0))?;
+        let file = File::create(path.as_ref().join(format!("{}_taters.json", guild)))?;
+
+        // Make the wrapper struct
+        let hbot = HandlerButOnlyTatersRef {
+            tatered_messages: &handler.tatered_messages,
+            taters_given: &handler.taters_given,
+            taters_got: &handler.taters_got,
+        };
+        serde_json::to_writer(file, &hbot)?;
+        Ok(())
+    }
+
+    /// Save the configuration only to json
+    async fn save_config<P: AsRef<Path>>(
+        path: P,
+        handlers: &HashMap<GuildId, Handler>,
+    ) -> Result<(), anyhow::Error> {
+        for (&id, _) in handlers.iter() {
+            HandlerWrapper::save_server_config(&path, &handlers, id).await?
+        }
+        Ok(())
+    }
+
+    /// Save one server's config to json
+    async fn save_server_config<P: AsRef<Path>>(
+        path: P,
+        handlers: &HashMap<GuildId, Handler>,
+        guild: GuildId,
+    ) -> Result<(), anyhow::Error> {
+        let handler = handlers
+            .get(&guild)
+            .ok_or_else(|| anyhow!("Guild id {} didn't exist somehow", guild.0))?;
+        let file = File::create(path.as_ref().join(format!("{}_config.json", guild)))?;
+        serde_json::to_writer(file, &handler.config)?;
+        Ok(())
+    }
+
+    /// Save EVERYTHING
+    async fn save_all<P: AsRef<Path>>(
+        path: P,
+        handlers: &HashMap<GuildId, Handler>,
+    ) -> Result<(), anyhow::Error> {
+        HandlerWrapper::save_config(&path, handlers).await?;
+        HandlerWrapper::save_taters(&path, handlers).await?;
+        Ok(())
     }
 
     async fn bot_uid(&self) -> UserId {
@@ -101,6 +175,25 @@ struct Handler {
     taters_got: HashMap<UserId, u64>,
     /// How many taters each user has posted
     taters_given: HashMap<UserId, u64>,
+}
+
+/// Wrapper struct that only stores info about the taters so `Handler`
+/// can be deserialized piecewise
+#[derive(Deserialize)]
+struct HandlerButOnlyTaters {
+    tatered_messages: HashMap<MessageId, TateredMessage>,
+    taters_got: HashMap<UserId, u64>,
+    taters_given: HashMap<UserId, u64>,
+}
+
+/// Wrapper struct that only stores info about the taters so `Handler`
+/// can be serialized piecewise.
+/// this time with references
+#[derive(Serialize)]
+struct HandlerButOnlyTatersRef<'a> {
+    tatered_messages: &'a HashMap<MessageId, TateredMessage>,
+    taters_got: &'a HashMap<UserId, u64>,
+    taters_given: &'a HashMap<UserId, u64>,
 }
 
 impl Handler {

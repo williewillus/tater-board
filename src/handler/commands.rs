@@ -2,6 +2,7 @@
 
 use std::convert::TryFrom;
 
+use anyhow::anyhow;
 use serenity::{
     client::Context,
     model::{
@@ -11,7 +12,6 @@ use serenity::{
         Permissions,
     },
     prelude::*,
-    Error,
 };
 
 use super::{Handler, HandlerWrapper};
@@ -20,7 +20,7 @@ pub async fn handle_commands(
     wrapper: &HandlerWrapper,
     ctx: &Context,
     message: &Message,
-) -> Result<(), Error> {
+) -> Result<(), anyhow::Error> {
     let guild_id = match message.guild_id {
         Some(it) => it,
         None => return Ok(()),
@@ -376,10 +376,14 @@ People with any role with an Administrator privilege are always admins of this b
             };
         }
         "save" if is_admin => {
-            let msg: Result<String, String> =
-                HandlerWrapper::save(&wrapper.save_dir_path, &*handlers)
+            // we only need to save taters cause, as this is an admin command, config is about to get saved
+            let msg = if let Some(id) = message.guild_id {
+                HandlerWrapper::save_server_taters(&wrapper.save_dir_path, &*handlers, id)
                     .await
-                    .map(|_| "Saved successfully!".to_string());
+                    .map(|_| String::from("Saved this server's taters!"))
+            } else {
+                Err(anyhow!("There was no guild ID (are you in a PM?)"))
+            };
             match msg {
                 Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
                 Err(oh_no) => {
@@ -390,10 +394,30 @@ People with any role with an Administrator privilege are always admins of this b
                 }
             };
         }
-        command @ _ => {
+        command => {
             message
                 .channel_id
                 .say(&ctx.http, format!("Unknown command: {}", command))
+                .await?;
+        }
+    }
+
+    if is_admin {
+        // Assume that an admin command means we changed something about the config.
+        // This could be done smarter but i don't care
+        if let Some(id) = message.guild_id {
+            HandlerWrapper::save_server_config(&wrapper.save_dir_path, &*handlers, id)
+                .await
+                .map_err(|e| anyhow!(e))?;
+        } else {
+            message
+                .channel_id
+                .say(
+                    &ctx.http,
+                    String::from(
+                        "Unable to save config because there was no guild ID (are you in a PM?)",
+                    ),
+                )
                 .await?;
         }
     }
