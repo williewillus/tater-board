@@ -71,10 +71,11 @@ pub async fn handle_commands(
 - `set_threshold <number>`: Set how many potatoes have to be on a message before it is pinned.
 - `blacklist <channel_id>`: Make the channel no longer eligible for pinning messages, regardless of potato count.
 - `unblacklist <channel_id>`: Unblacklist this channel so messages from it can be pinned again.
+- `show_blacklist`: Show which channels are ineligible for pinning messages.
 - `admin <user_id>`: Let this user access this bot's admin commands on this server.
 - `unadmin <user_id>`: Stops this user from being an admin on this server.
 - `list_admins`: Print a list of admins.
-- `save`: Save this server's information to the server the bot is running on in case it goes down.
+- `save`: Flush any in-memory state to disk.
 People with any role with an Administrator privilege are always admins of this bot.";
             message.channel_id.say(&ctx.http, HELP).await?;
             if is_admin {
@@ -279,7 +280,14 @@ People with any role with an Administrator privilege are always admins of this b
                         .await?
                 }
             };
-        }
+        },
+        "show_blacklist" if is_admin => {
+            let msg = this.config.blacklisted_channels.iter()
+                .map(|c| format!("- {}", c.mention()))
+                .collect::<Vec<_>>()
+                .join("\n");
+            message.channel_id.say(&ctx.http, msg).await?;
+        },
         "set_potato" if is_admin => {
             let msg: Result<String, String> = try {
                 let emoji = args
