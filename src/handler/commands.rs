@@ -4,7 +4,12 @@ use std::convert::TryFrom;
 
 use serenity::{
     client::Context,
-    model::{channel::Message, channel::ReactionType, id::ChannelId, Permissions},
+    model::{
+        channel::Message,
+        channel::ReactionType,
+        id::{ChannelId, UserId},
+        Permissions,
+    },
     prelude::*,
     Error,
 };
@@ -34,19 +39,18 @@ pub async fn handle_commands(
         Some(it) => it,
         None => return Ok(()),
     };
-    let is_admin = match guild
-        .member(&ctx.http, message.author.id)
-        .await?
-        .roles(&ctx.cache)
-        .await
-    {
-        Some(roles) => roles
-            .iter()
-            .any(|r| r.has_permission(Permissions::ADMINISTRATOR)),
-        None => return Ok(()),
-    };
-    // i'm also an "admin"
-    let is_admin = is_admin || message.author.id == 273636822565912578;
+    let is_admin = this.config.admins.contains(&message.author.id)
+        || match guild
+            .member(&ctx.http, message.author.id)
+            .await?
+            .roles(&ctx.cache)
+            .await
+        {
+            Some(roles) => roles
+                .iter()
+                .any(|r| r.has_permission(Permissions::ADMINISTRATOR)),
+            None => return Ok(()),
+        };
 
     let split = message.content.split_whitespace().collect::<Vec<_>>();
     if split.len() < 2 {
@@ -67,7 +71,11 @@ pub async fn handle_commands(
 - `set_threshold <number>`: Set how many potatoes have to be on a message before it is pinned.
 - `blacklist <channel_id>`: Make the channel no longer eligible for pinning messages, regardless of potato count.
 - `unblacklist <channel_id>`: Unblacklist this channel so messages from it can be pinned again.
-- `save`: Save this server's information to the server the bot is running on in case it goes down.";
+- `admin <user_id>`: Let this user access this bot's admin commands on this server.
+- `unadmin <user_id>`: Stops this user from being an admin on this server.
+- `list_admins`: Print a list of admins.
+- `save`: Save this server's information to the server the bot is running on in case it goes down.
+People with any role with an Administrator privilege are always admins of this bot.";
             message.channel_id.say(&ctx.http, HELP).await?;
             if is_admin {
                 message.channel_id.say(&ctx.http, ADMIN_HELP).await?;
@@ -276,6 +284,71 @@ pub async fn handle_commands(
                 let old_react = this.config.tater_emoji.to_string();
                 this.config.tater_emoji = potato_react;
                 format!("Set potato emoji to {} (from {})", emoji, old_react)
+            };
+            match msg {
+                Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
+                Err(oh_no) => {
+                    message
+                        .channel_id
+                        .say(&ctx.http, format!("An error occured: \n{}", oh_no))
+                        .await?
+                }
+            };
+        }
+        "admin" if is_admin => {
+            let msg: Result<String, String> = try {
+                let user_id = args
+                    .get(0)
+                    .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
+                let user_id = UserId(user_id.parse::<u64>().map_err(|e| e.to_string())?);
+                let existed = !this.config.admins.insert(user_id);
+                if !existed {
+                    format!("Added `{}` as a new admin", user_id)
+                } else {
+                    format!("`{}` was already an admin", user_id)
+                }
+            };
+            match msg {
+                Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
+                Err(oh_no) => {
+                    message
+                        .channel_id
+                        .say(&ctx.http, format!("An error occured: \n{}", oh_no))
+                        .await?
+                }
+            };
+        }
+        "unadmin" if is_admin => {
+            let msg: Result<String, String> = try {
+                let user_id = args
+                    .get(0)
+                    .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
+                let user_id = UserId(user_id.parse::<u64>().map_err(|e| e.to_string())?);
+                let existed = this.config.admins.remove(&user_id);
+                if existed {
+                    format!("Removed `{}` from being an admin", user_id)
+                } else {
+                    format!("`{}` was not an admin", user_id)
+                }
+            };
+            match msg {
+                Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
+                Err(oh_no) => {
+                    message
+                        .channel_id
+                        .say(&ctx.http, format!("An error occured: \n{}", oh_no))
+                        .await?
+                }
+            };
+        }
+        "list_admins" if is_admin => {
+            let msg: Result<String, String> = try {
+                let mut msg = String::from("Admins:");
+                for &id in this.config.admins.iter() {
+                    let user = ctx.http.get_user(id.0).await.map_err(|e| e.to_string())?;
+                    msg += format!("\n- {}", user.tag()).as_ref();
+                }
+                msg
             };
             match msg {
                 Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,

@@ -346,6 +346,9 @@ pub struct Config {
     pub blacklisted_channels: HashSet<ChannelId>,
     /// Channel ID to send pins to
     pub pin_channel: ChannelId,
+
+    /// people who can administrate the bot
+    pub admins: HashSet<UserId>,
 }
 
 impl Config {
@@ -368,6 +371,12 @@ impl Config {
             },
             blacklisted_channels: HashSet::new(),
             pin_channel: ChannelId(0),
+            admins: {
+                let mut set = HashSet::new();
+                // this is my user ID
+                set.insert(UserId(273636822565912578));
+                set
+            },
         }
     }
 }
