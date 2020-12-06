@@ -125,13 +125,12 @@ People with any role with an Administrator privilege are always admins of this b
                         .map_err(|e| e.to_string())?;
 
                     board.push_str(&format!(
-                        "{} {}: {} has {} {}x {}\n",
+                        "{} {}: {} has {} {}x taters\n",
                         medal,
                         idx + 1,
                         user.mention(),
                         verb,
                         count,
-                        this.config.tater_emoji.to_string()
                     ));
                 }
 
@@ -280,14 +279,17 @@ People with any role with an Administrator privilege are always admins of this b
                         .await?
                 }
             };
-        },
+        }
         "show_blacklist" if is_admin => {
-            let msg = this.config.blacklisted_channels.iter()
+            let msg = this
+                .config
+                .blacklisted_channels
+                .iter()
                 .map(|c| format!("- {}", c.mention()))
                 .collect::<Vec<_>>()
                 .join("\n");
             message.channel_id.say(&ctx.http, msg).await?;
-        },
+        }
         "set_potato" if is_admin => {
             let msg: Result<String, String> = try {
                 let emoji = args
@@ -389,7 +391,10 @@ People with any role with an Administrator privilege are always admins of this b
             };
         }
         command @ _ => {
-            message.channel_id.say(&ctx.http, format!("Unknown command: {}", command)).await?;
+            message
+                .channel_id
+                .say(&ctx.http, format!("Unknown command: {}", command))
+                .await?;
         }
     }
 
