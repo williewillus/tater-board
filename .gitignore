@@ -1,0 +1,6 @@
+/target
+/.vscode
+/saves
+
+# this has the secret in it
+Makefile
