@@ -29,7 +29,7 @@ pub async fn handle_commands(
     let this = handlers.entry(guild_id).or_insert_with(Handler::new);
 
     if message.author.id == ctx.http.get_current_user().await?.id
-        || !message.content.starts_with("potato")
+        || !message.content.starts_with(&this.config.trigger_word)
     {
         return Ok(());
     }

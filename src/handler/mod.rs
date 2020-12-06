@@ -335,6 +335,9 @@ async fn update_pin_message(
 /// Configuration for the handler
 #[derive(Serialize, Deserialize)]
 pub struct Config {
+    /// The trigger word for bot administration commands
+    pub trigger_word: String,
+    
     /// Taters required for the first level of potato.
     pub threshold: u64,
     /// Potatoes displayed on the pinned message.
@@ -357,6 +360,7 @@ impl Config {
     /// Make a new Config with default values
     fn new() -> Self {
         Self {
+            trigger_word: "taterboard".to_owned(),
             threshold: 5,
             medals: vec![
                 "🥔".to_owned(),
