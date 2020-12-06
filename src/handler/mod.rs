@@ -50,15 +50,22 @@ impl HandlerWrapper {
                     let entry = entry.ok()?;
                     let path = entry.path();
                     let stem = path.file_stem()?;
-                    let tostred = stem.to_string_lossy();
-                    Some(tostred.into_owned())
+                    let stem = stem.to_string_lossy();
+                    let stem = stem.into_owned();
+                    // Now get out the ID part first
+                    let id_end_idx = stem.find(|c: char| !c.is_numeric())?;
+                    let id = &stem[..id_end_idx];
+                    let id = id.parse::<u64>().ok()?;
+                    id
                 })
-                // Make unique
+                // Unique-ify the stems
+                // this is because `xyz_taters.json` and `xyz_config.json` will both be loaded
+                // otherwise we would try to open those twice.
+                // We are collecting to a hashmap, not a vec, so technically we don't *need*
+                // to do this but it probably saves some time
                 .unique()
                 // Now open up the files
-                .filter_map(|stem| {
-                    let id = stem.parse::<u64>().ok()?;
-
+                .filter_map(|id| {
                     let tater_filepath = format!("{}_taters.json", id);
                     let tater_file = File::open(save_path.join(tater_filepath)).ok()?;
                     let config_filepath = format!("{}_config.json", id);
