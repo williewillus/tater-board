@@ -38,7 +38,7 @@ pub struct HandlerWrapper {
 
 impl HandlerWrapper {
     /// Try to load from the given file, or just create default if it can't
-    pub fn new(save_path: PathBuf) -> Self {
+    pub fn new(save_path: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
         let map = match save_path.read_dir() {
             Ok(dir) => dir
                 .filter_map(|entry| {
@@ -53,7 +53,9 @@ impl HandlerWrapper {
                     Some((guild_id, handler))
                 })
                 .collect(),
-            Err(..) => HashMap::new(),
+            Err(e) => {
+                return Err(Box::new(e));
+            }
         };
         Self {
             handlers: Arc::new(Mutex::new(map)),
