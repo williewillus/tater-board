@@ -206,6 +206,10 @@ impl EventHandler for HandlerWrapper {
                         return;
                     }
                 };
+                if Some(tatered_message.sender) == reaction.user_id {
+                    // hey you can't do your own message!
+                    return;
+                }
                 // one fewer potato on this message
                 tatered_message.count -= 1;
                 // smuggle out the message to avoid borrow errors
