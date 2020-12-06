@@ -34,6 +34,8 @@ pub struct HandlerWrapper {
 
     /// Update info
     updates: Arc<Mutex<Updates>>,
+
+    bot_user_id: Arc<RwLock<Option<UserId>>>,
 }
 
 impl HandlerWrapper {
@@ -61,6 +63,7 @@ impl HandlerWrapper {
             handlers: Arc::new(Mutex::new(map)),
             save_dir_path: save_path,
             updates: Arc::new(Mutex::new(Updates::new())),
+            bot_user_id: Arc::new(RwLock::new(None)),
         })
     }
 
@@ -78,6 +81,11 @@ impl HandlerWrapper {
             })
             .collect::<Result<Vec<_>, String>>()
             .map(|_| ())
+    }
+
+    async fn bot_uid(&self) -> UserId {
+        let g = self.bot_user_id.read().await;
+        g.expect("Asking for bot UID before Ready event has been received")
     }
 }
 
@@ -113,6 +121,8 @@ impl EventHandler for HandlerWrapper {
             "{}#{} is connected!",
             ready.user.name, ready.user.discriminator
         );
+        let mut g = self.bot_user_id.write().await;
+        *g = Some(ready.user.id);
     }
 
     async fn reaction_add(&self, ctx: Context, reaction: Reaction) {
@@ -123,17 +133,19 @@ impl EventHandler for HandlerWrapper {
         let mut handlers = self.handlers.lock().await;
         let this = handlers.entry(guild_id).or_insert_with(Handler::new);
 
+        if this.config.tater_emoji != reaction.emoji {
+            return;
+        }
+
+        if this
+            .config
+            .blacklisted_channels
+            .contains(&reaction.channel_id)
+        {
+            return;
+        }
+
         let res: Result<(), SerenityError> = try {
-            if this.config.tater_emoji != reaction.emoji {
-                return;
-            }
-            if this
-                .config
-                .blacklisted_channels
-                .contains(&reaction.channel_id)
-            {
-                return;
-            }
             // ok this is a tater!
             let giver = reaction.user(&ctx.http).await?;
 
@@ -145,6 +157,9 @@ impl EventHandler for HandlerWrapper {
                     hash_map::Entry::Vacant(v) => {
                         // this is empty, so we need to fill the cache
                         let message = reaction.message(&ctx.http).await?;
+                        if message.author.id == self.bot_uid().await {
+                            return;
+                        }
                         v.insert(TateredMessage::new(message.author.id, 0, None))
                     }
                 };
