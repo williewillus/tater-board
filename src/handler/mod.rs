@@ -72,7 +72,7 @@ impl HandlerWrapper {
             .map(|(id, handler)| {
                 let file = File::create(path.as_ref().join(format!("{}.json", id)))
                     .map_err(|e| e.to_string())?;
-                serde_json::to_writer_pretty(file, handler).map_err(|e| e.to_string())
+                serde_json::to_writer(file, handler).map_err(|e| e.to_string())
             })
             .collect::<Result<Vec<_>, String>>()
             .map(|_| ())
