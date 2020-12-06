@@ -25,8 +25,8 @@ impl Updates {
         }
     }
 
-    /// Save every day
-    const SAVE_EVERY: Duration = Duration::from_secs(60 * 60 * 24);
+    /// Save every half hour
+    const SAVE_EVERY: Duration = Duration::from_secs(60 * 30);
     /// Update status every hour
     const UPDATE_EVERY: Duration = Duration::from_secs(60 * 60);
 }

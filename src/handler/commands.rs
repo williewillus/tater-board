@@ -29,7 +29,7 @@ pub async fn handle_commands(
     let this = handlers.entry(guild_id).or_insert_with(Handler::new);
 
     if message.author.id == ctx.http.get_current_user().await?.id
-        || !message.content.starts_with("potato")
+        || !message.content.starts_with(&this.config.trigger_word)
     {
         return Ok(());
     }
@@ -71,10 +71,11 @@ pub async fn handle_commands(
 - `set_threshold <number>`: Set how many potatoes have to be on a message before it is pinned.
 - `blacklist <channel_id>`: Make the channel no longer eligible for pinning messages, regardless of potato count.
 - `unblacklist <channel_id>`: Unblacklist this channel so messages from it can be pinned again.
+- `show_blacklist`: Show which channels are ineligible for pinning messages.
 - `admin <user_id>`: Let this user access this bot's admin commands on this server.
 - `unadmin <user_id>`: Stops this user from being an admin on this server.
 - `list_admins`: Print a list of admins.
-- `save`: Save this server's information to the server the bot is running on in case it goes down.
+- `save`: Flush any in-memory state to disk.
 People with any role with an Administrator privilege are always admins of this bot.";
             message.channel_id.say(&ctx.http, HELP).await?;
             if is_admin {
@@ -188,15 +189,16 @@ People with any role with an Administrator privilege are always admins of this b
                 this.config.pin_channel = channel_id;
 
                 let existed = !this.config.blacklisted_channels.insert(channel_id);
+                let channel_mention = channel_id.mention();
                 if !existed {
                     format!(
                         "Set pins channel to `{}` and added it to the blacklist",
-                        channel_id
+                        &channel_mention
                     )
                 } else {
                     format!(
                         "Set pins channel to `{}`, and it was already blacklisted",
-                        channel_id
+                        &channel_mention
                     )
                 }
             };
@@ -236,10 +238,12 @@ People with any role with an Administrator privilege are always admins of this b
                     .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
                 let channel_id = ChannelId(channel_id.parse::<u64>().map_err(|e| e.to_string())?);
                 let existed = !this.config.blacklisted_channels.insert(channel_id);
+
+                let channel_mention = channel_id.mention();
                 if !existed {
-                    format!("Blacklisted `{}`", channel_id)
+                    format!("Blacklisted `{}`", &channel_mention)
                 } else {
-                    format!("`{}` was already blacklisted", channel_id)
+                    format!("`{}` was already blacklisted", &channel_mention)
                 }
             };
             match msg {
@@ -259,10 +263,12 @@ People with any role with an Administrator privilege are always admins of this b
                     .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
                 let channel_id = ChannelId(channel_id.parse::<u64>().map_err(|e| e.to_string())?);
                 let existed = this.config.blacklisted_channels.remove(&channel_id);
+
+                let channel_mention = channel_id.mention();
                 if existed {
-                    format!("Unblacklisted `{}`", channel_id)
+                    format!("Unblacklisted `{}`", &channel_mention)
                 } else {
-                    format!("`{}` was not blacklisted", channel_id)
+                    format!("`{}` was not blacklisted", &channel_mention)
                 }
             };
             match msg {
@@ -274,7 +280,14 @@ People with any role with an Administrator privilege are always admins of this b
                         .await?
                 }
             };
-        }
+        },
+        "show_blacklist" if is_admin => {
+            let msg = this.config.blacklisted_channels.iter()
+                .map(|c| format!("- {}", c.mention()))
+                .collect::<Vec<_>>()
+                .join("\n");
+            message.channel_id.say(&ctx.http, msg).await?;
+        },
         "set_potato" if is_admin => {
             let msg: Result<String, String> = try {
                 let emoji = args
@@ -375,9 +388,9 @@ People with any role with an Administrator privilege are always admins of this b
                 }
             };
         }
-
-        // ignore other stuff
-        _ => {}
+        command @ _ => {
+            message.channel_id.say(&ctx.http, format!("Unknown command: {}", command)).await?;
+        }
     }
 
     Ok(())
