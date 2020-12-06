@@ -57,11 +57,11 @@ impl HandlerWrapper {
                 return Err(Box::new(e));
             }
         };
-        Self {
+        Ok(Self {
             handlers: Arc::new(Mutex::new(map)),
             save_dir_path: save_path,
             updates: Arc::new(Mutex::new(Updates::new())),
-        }
+        })
     }
 
     /// save this to json

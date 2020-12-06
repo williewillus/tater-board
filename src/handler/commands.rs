@@ -188,15 +188,16 @@ People with any role with an Administrator privilege are always admins of this b
                 this.config.pin_channel = channel_id;
 
                 let existed = !this.config.blacklisted_channels.insert(channel_id);
+                let channel_mention = channel_id.mention();
                 if !existed {
                     format!(
                         "Set pins channel to `{}` and added it to the blacklist",
-                        channel_id
+                        &channel_mention
                     )
                 } else {
                     format!(
                         "Set pins channel to `{}`, and it was already blacklisted",
-                        channel_id
+                        &channel_mention
                     )
                 }
             };
@@ -236,10 +237,12 @@ People with any role with an Administrator privilege are always admins of this b
                     .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
                 let channel_id = ChannelId(channel_id.parse::<u64>().map_err(|e| e.to_string())?);
                 let existed = !this.config.blacklisted_channels.insert(channel_id);
+
+                let channel_mention = channel_id.mention();
                 if !existed {
-                    format!("Blacklisted `{}`", channel_id)
+                    format!("Blacklisted `{}`", &channel_mention)
                 } else {
-                    format!("`{}` was already blacklisted", channel_id)
+                    format!("`{}` was already blacklisted", &channel_mention)
                 }
             };
             match msg {
@@ -259,10 +262,12 @@ People with any role with an Administrator privilege are always admins of this b
                     .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
                 let channel_id = ChannelId(channel_id.parse::<u64>().map_err(|e| e.to_string())?);
                 let existed = this.config.blacklisted_channels.remove(&channel_id);
+
+                let channel_mention = channel_id.mention();
                 if existed {
-                    format!("Unblacklisted `{}`", channel_id)
+                    format!("Unblacklisted `{}`", &channel_mention)
                 } else {
-                    format!("`{}` was not blacklisted", channel_id)
+                    format!("`{}` was not blacklisted", &channel_mention)
                 }
             };
             match msg {
@@ -375,9 +380,9 @@ People with any role with an Administrator privilege are always admins of this b
                 }
             };
         }
-
-        // ignore other stuff
-        _ => {}
+        command @ _ => {
+            message.channel_id.say(&ctx.http, format!("Unknown command: {}", command)).await?;
+        }
     }
 
     Ok(())
