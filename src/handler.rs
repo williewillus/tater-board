@@ -629,6 +629,7 @@ impl Config {
                 "<:tinypotato:735938441505931286>".to_owned(),
                 "<:angerypotato:559818417654333461>".to_owned(),
                 "<:concernedpotato:711936190080876584>".to_owned(),
+                "<a:pattato:754104288078331955>".to_owned(),
             ],
             tater_emoji: ReactionType::Custom {
                 animated: false,
