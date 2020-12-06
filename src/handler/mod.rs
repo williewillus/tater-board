@@ -324,6 +324,24 @@ async fn update_pin_message(
                 ),
             };
 
+            let previous_message_count = this
+                .tatered_messages
+                .iter()
+                .filter_map(|(_id, msg)| {
+                    if msg.sender == tatered_message.sender {
+                        Some(())
+                    } else {
+                        None
+                    }
+                })
+                .count()
+                - 1;
+
+            let image = original_message
+                .attachments
+                .get(0)
+                .and_then(|att| att.dimensions().map(|_dims| &att.url));
+
             let msg = this
                 .config
                 .pin_channel
@@ -339,10 +357,14 @@ async fn update_pin_message(
                             )
                             .footer(|f| {
                                 f.text(format!(
-                                    "This user has received {}x {}",
-                                    tatered_message.count, this.config.tater_emoji
+                                    "This user has been pinned {} times before",
+                                    previous_message_count,
                                 ))
-                            })
+                            });
+                        if let Some(image) = image {
+                            e.image(image);
+                        }
+                        e
                     })
                 })
                 .await?;
@@ -356,7 +378,7 @@ async fn update_pin_message(
 pub struct Config {
     /// The trigger word for bot administration commands
     pub trigger_word: String,
-    
+
     /// Taters required for the first level of potato.
     pub threshold: u64,
     /// Potatoes displayed on the pinned message.
