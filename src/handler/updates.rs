@@ -48,6 +48,7 @@ impl HandlerWrapper {
             || updates.status_idx.is_none()
         {
             println!("updating status at {:?}", &now);
+            updates.last_status_change = now;
             let idx = updates.status_idx.unwrap_or(0);
 
             // number of status messages there are

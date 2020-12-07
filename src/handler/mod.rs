@@ -56,7 +56,7 @@ impl HandlerWrapper {
                     let id_end_idx = stem.find(|c: char| !c.is_numeric())?;
                     let id = &stem[..id_end_idx];
                     let id = id.parse::<u64>().ok()?;
-                    id
+                    Some(id)
                 })
                 // Unique-ify the stems
                 // this is because `xyz_taters.json` and `xyz_config.json` will both be loaded
