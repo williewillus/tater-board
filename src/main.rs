@@ -5,7 +5,7 @@ mod handler;
 use std::{env, error::Error, path::PathBuf};
 
 use handler::HandlerWrapper;
-use serenity::Client;
+use serenity::{Client, client::bridge::gateway::GatewayIntents};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -23,6 +23,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tokio::fs::create_dir_all(&path_to_save).await?;
 
     let mut client = Client::builder(&token)
+        .intents(GatewayIntents::GUILD_MESSAGES | GatewayIntents::GUILD_MESSAGE_REACTIONS)
         .event_handler(HandlerWrapper::new(path_to_save)?)
         .await?;
 
