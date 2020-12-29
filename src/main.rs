@@ -9,6 +9,7 @@ use serenity::{Client, client::bridge::gateway::GatewayIntents};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    env_logger::init_from_env(env_logger::Env::default());
     log::info!("taterboard v{} initializing", env!("CARGO_PKG_VERSION"));
 
     let token = env::var("TATERBOARD_TOKEN").expect("expected bot token at env `TATERBOARD_TOKEN`");
