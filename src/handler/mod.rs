@@ -352,6 +352,10 @@ impl EventHandler for HandlerWrapper {
     }
 
     async fn message(&self, ctx: Context, message: Message) {
+        if message.author.bot {
+            return;
+        }
+
         // Try every time it sees a message.
         // I figure that's often enough
         if let Err(oh_no) = self.check_updates(&ctx).await {
