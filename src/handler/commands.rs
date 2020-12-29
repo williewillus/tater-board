@@ -19,6 +19,7 @@ use super::{Handler, HandlerWrapper};
 pub async fn handle_commands(
     wrapper: &HandlerWrapper,
     ctx: &Context,
+    uid: UserId,
     message: &Message,
 ) -> Result<(), anyhow::Error> {
     let guild_id = match message.guild_id {
@@ -28,7 +29,7 @@ pub async fn handle_commands(
     let mut handlers = wrapper.handlers.lock().await;
     let this = handlers.entry(guild_id).or_insert_with(Handler::new);
 
-    if message.author.id == ctx.http.get_current_user().await?.id
+    if message.author.id == uid
         || !message.content.starts_with(&this.config.trigger_word)
     {
         return Ok(());

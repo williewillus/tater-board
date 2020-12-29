@@ -362,7 +362,8 @@ impl EventHandler for HandlerWrapper {
             log::error!("`message`: {}", oh_no);
         }
 
-        let res = commands::handle_commands(self, &ctx, &message).await;
+        let uid = self.bot_uid().await;
+        let res = commands::handle_commands(self, &ctx, uid, &message).await;
         if let Err(oh_no) = res {
             log::error!("`message`: {}", oh_no);
         }
