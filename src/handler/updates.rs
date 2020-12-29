@@ -39,7 +39,7 @@ impl HandlerWrapper {
 
         if now.duration_since(updates.last_save) >= Updates::SAVE_EVERY {
             // gotta save!
-            println!("saving at {:?}", &now);
+            log::debug!("saving at {:?}", &now);
             updates.last_save = now;
             let lock = self.handlers.lock().await;
             HandlerWrapper::save_all(&self.save_dir_path, &*lock).await?;
@@ -47,7 +47,7 @@ impl HandlerWrapper {
         if now.duration_since(updates.last_status_change) >= Updates::UPDATE_EVERY
             || updates.status_idx.is_none()
         {
-            println!("updating status at {:?}", &now);
+            log::debug!("updating status at {:?}", &now);
             updates.last_status_change = now;
             let idx = updates.status_idx.unwrap_or(0);
 
@@ -100,7 +100,7 @@ impl HandlerWrapper {
                         .max()
                         .unwrap_or(0);
                     Activity::competing(
-                        format!("for the record {} potatoes on one message", max).as_str(),
+                        format!("the record {} potatoes on one message", max).as_str(),
                     )
                 }
                 oh_no => {

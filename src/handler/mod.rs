@@ -73,6 +73,7 @@ impl HandlerWrapper {
 
                     let taters: HandlerButOnlyTaters = serde_json::from_reader(tater_file).ok()?;
                     let config: Config = serde_json::from_reader(config_file).ok()?;
+                    log::info!("Loaded taters and config for guild {}", id);
                     Some((
                         GuildId(id),
                         Handler {
@@ -102,7 +103,7 @@ impl HandlerWrapper {
         handlers: &HashMap<GuildId, Handler>,
     ) -> Result<(), anyhow::Error> {
         for (&id, _) in handlers.iter() {
-            HandlerWrapper::save_server_taters(&path, &handlers, id).await?
+            HandlerWrapper::save_server_taters(&path, &handlers, id).await?;
         }
 
         Ok(())
@@ -126,6 +127,7 @@ impl HandlerWrapper {
             taters_got: &handler.taters_got,
         };
         serde_json::to_writer(file, &hbot)?;
+        log::debug!("Saved taters for guild {:?}", guild);
         Ok(())
     }
 
@@ -151,6 +153,7 @@ impl HandlerWrapper {
             .ok_or_else(|| anyhow!("Guild id {} didn't exist somehow", guild.0))?;
         let file = File::create(path.as_ref().join(format!("{}_config.json", guild)))?;
         serde_json::to_writer(file, &handler.config)?;
+        log::debug!("Saved config for guild {:?}", guild);
         Ok(())
     }
 
@@ -217,7 +220,7 @@ impl Handler {
 #[async_trait]
 impl EventHandler for HandlerWrapper {
     async fn ready(&self, _: Context, ready: Ready) {
-        println!(
+        log::info!(
             "{}#{} is connected!",
             ready.user.name, ready.user.discriminator
         );
@@ -284,7 +287,7 @@ impl EventHandler for HandlerWrapper {
             }
         };
         if let Err(oh_no) = res {
-            eprintln!("`reaction_add`: {}", oh_no);
+            log::error!("`reaction_add`: {}", oh_no);
         }
     }
 
@@ -317,7 +320,7 @@ impl EventHandler for HandlerWrapper {
                     hash_map::Entry::Occupied(o) => o.into_mut(),
                     hash_map::Entry::Vacant(..) => {
                         // this should never be an empty entry
-                        eprintln!("`reaction_remove`: there was an empty entry in `tatered_messages`. This probably means someone un-reacted to a message this bot did not know about, from before the bot was introduced.");
+                        log::error!("`reaction_remove`: there was an empty entry in `tatered_messages`. This probably means someone un-reacted to a message this bot did not know about, from before the bot was introduced.");
                         return;
                     }
                 };
@@ -342,7 +345,7 @@ impl EventHandler for HandlerWrapper {
             }
         };
         if let Err(oh_no) = res {
-            eprintln!("`reaction_remove`: {}", oh_no);
+            log::error!("`reaction_remove`: {}", oh_no);
         }
     }
 
@@ -350,12 +353,12 @@ impl EventHandler for HandlerWrapper {
         // Try every time it sees a message.
         // I figure that's often enough
         if let Err(oh_no) = self.check_updates(&ctx).await {
-            eprintln!("`message`: {}", oh_no);
+            log::error!("`message`: {}", oh_no);
         }
 
         let res = commands::handle_commands(self, &ctx, &message).await;
         if let Err(oh_no) = res {
-            eprintln!("`message`: {}", oh_no);
+            log::error!("`message`: {}", oh_no);
         }
     }
 }
