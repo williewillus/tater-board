@@ -248,6 +248,7 @@ impl EventHandler for HandlerWrapper {
             return;
         }
 
+        log::trace!("tater added by {:?} to message {:?}", reaction.user_id, reaction.message_id);
         let res: Result<(), SerenityError> = try {
             // ok this is a tater!
             let giver = reaction.user(&ctx.http).await?;
@@ -312,6 +313,7 @@ impl EventHandler for HandlerWrapper {
             }
             // ok this is a tater!
             let ungiver = reaction.user(&ctx.http).await?;
+            log::trace!("tater removed by {:?} from message {:?}", reaction.user_id, reaction.message_id);
 
             // Update taters received and taters on this message via the cache
             let tatered_message = {
