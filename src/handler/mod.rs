@@ -288,7 +288,7 @@ impl EventHandler for HandlerWrapper {
             }
         };
         if let Err(oh_no) = res {
-            log::error!("`reaction_add`: {}", oh_no);
+            log::error!("`reaction_add`: {:?}", oh_no);
         }
     }
 
@@ -347,7 +347,7 @@ impl EventHandler for HandlerWrapper {
             }
         };
         if let Err(oh_no) = res {
-            log::error!("`reaction_remove`: {}", oh_no);
+            log::error!("`reaction_remove`: {:?}", oh_no);
         }
     }
 
@@ -359,13 +359,13 @@ impl EventHandler for HandlerWrapper {
         // Try every time it sees a message.
         // I figure that's often enough
         if let Err(oh_no) = self.check_updates(&ctx).await {
-            log::error!("`message`: {}", oh_no);
+            log::error!("`message`: {:?}", oh_no);
         }
 
         let uid = self.bot_uid().await;
         let res = commands::handle_commands(self, &ctx, uid, &message).await;
         if let Err(oh_no) = res {
-            log::error!("`message`: {}", oh_no);
+            log::error!("`message`: {:?}", oh_no);
         }
     }
 }
