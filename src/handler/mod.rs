@@ -403,6 +403,7 @@ async fn update_pin_message(
 
     match tatered_message.pin_id {
         Some(mid) => {
+            log::trace!("Editing existing pin message {}", mid);
             // we just need to edit the header
             let mut msg = ctx
                 .http
@@ -413,6 +414,7 @@ async fn update_pin_message(
             Ok(tatered_message.pin_id)
         }
         None => {
+            log::trace!("Creating new pin message");
             // Must both create and edit message
             let original_message = reaction.message(&ctx.http).await?;
             let content_safe = original_message.content_safe(&ctx.cache).await;
