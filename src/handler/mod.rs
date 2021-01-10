@@ -9,7 +9,7 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{anyhow, bail};
+use anyhow::{Context as AnyhowContext, anyhow, bail};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serenity::{
@@ -249,9 +249,9 @@ impl EventHandler for HandlerWrapper {
         }
 
         log::trace!("tater added by {:?} to message {:?}", reaction.user_id, reaction.message_id);
-        let res: Result<(), SerenityError> = try {
+        let res: Result<(), anyhow::Error> = try {
             // ok this is a tater!
-            let giver = reaction.user(&ctx.http).await?;
+            let giver = reaction.user(&ctx.http).await.context("Getting user for reaction")?;
 
             // Update taters received and taters on this message via the cache
             let tatered_message = {
@@ -260,7 +260,7 @@ impl EventHandler for HandlerWrapper {
                     hash_map::Entry::Occupied(o) => o.into_mut(),
                     hash_map::Entry::Vacant(v) => {
                         // this is empty, so we need to fill the cache
-                        let message = reaction.message(&ctx.http).await?;
+                        let message = reaction.message(&ctx.http).await.with_context(|| "Getting message for reaction")?;
                         if message.author.id == self.bot_uid().await {
                             return;
                         }
@@ -282,7 +282,7 @@ impl EventHandler for HandlerWrapper {
             // this person got one more potato
             *this.taters_got.entry(tatered_message.sender).or_insert(0) += 1;
 
-            let new_pin_id = update_pin_message(this, &tatered_message, &reaction, &ctx).await?;
+            let new_pin_id = update_pin_message(this, &tatered_message, &reaction, &ctx).await.context("Update pin message")?;
             if let Some(tm) = this.tatered_messages.get_mut(&reaction.message_id) {
                 tm.pin_id = new_pin_id
             }
@@ -300,7 +300,7 @@ impl EventHandler for HandlerWrapper {
         let mut handlers = self.handlers.lock().await;
         let this = handlers.entry(guild_id).or_insert_with(Handler::new);
 
-        let res: Result<(), SerenityError> = try {
+        let res: Result<(), anyhow::Error> = try {
             if this.config.tater_emoji != reaction.emoji {
                 return;
             }
@@ -341,7 +341,7 @@ impl EventHandler for HandlerWrapper {
             // this person lost a potato
             *this.taters_got.entry(tatered_message.sender).or_insert(0) -= 1;
 
-            let new_pin_id = update_pin_message(this, &tatered_message, &reaction, &ctx).await?;
+            let new_pin_id = update_pin_message(this, &tatered_message, &reaction, &ctx).await.context("update_pin_message")?;
             if let Some(tm) = this.tatered_messages.get_mut(&reaction.message_id) {
                 tm.pin_id = new_pin_id
             }
@@ -376,7 +376,7 @@ async fn update_pin_message(
     tatered_message: &TateredMessage,
     reaction: &Reaction,
     ctx: &Context,
-) -> Result<Option<MessageId>, SerenityError> {
+) -> Result<Option<MessageId>, anyhow::Error> {
     let medal_idx = (tatered_message.count as f32 / this.config.threshold as f32)
         .log2()
         .floor();
@@ -394,7 +394,7 @@ async fn update_pin_message(
                 .http
                 .get_message(this.config.pin_channel.0, mid.0)
                 .await?;
-            msg.delete(&ctx.http).await?;
+            msg.delete(&ctx.http).await.context("deleting pin")?;
         }
         return Ok(None);
     };
@@ -408,8 +408,8 @@ async fn update_pin_message(
             let mut msg = ctx
                 .http
                 .get_message(this.config.pin_channel.0, mid.0)
-                .await?;
-            msg.edit(&ctx.http, |m| m.content(content)).await?;
+                .await.with_context(|| format!("getting message {} from channel {}", mid.0, this.config.pin_channel.0))?;
+            msg.edit(&ctx.http, |m| m.content(content)).await.context("updating pin text")?;
             // Don't change anything
             Ok(tatered_message.pin_id)
         }
