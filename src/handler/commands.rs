@@ -86,13 +86,16 @@ People with any role with an Administrator privilege are always admins of this b
         leaderboard @ "receivers" | leaderboard @ "givers" => {
             const PAGE_SIZE: usize = 10;
             let res: Result<(), String> = try {
-                let page_num = args.get(0).and_then(|page| page.parse().ok()).unwrap_or(0);
-
                 let map = if leaderboard == "receivers" {
                     &this.taters_got
                 } else {
                     &this.taters_given
                 };
+
+                let total_pages = map.len() / PAGE_SIZE + 1;
+                let page_num = args.get(0).and_then(|page| page.parse().ok()).unwrap_or(1)
+                    .max(1).min(total_pages);
+
                 // high score at the front
                 let mut scores: Vec<_> = map.iter().map(|(id, count)| (*id, *count)).collect();
                 scores.sort_by_key(|(_id, count)| *count);
@@ -103,7 +106,7 @@ People with any role with an Administrator privilege are always admins of this b
                 let to_display = scores
                     .iter()
                     .enumerate()
-                    .skip(PAGE_SIZE * page_num)
+                    .skip(PAGE_SIZE * (page_num - 1))
                     .take(PAGE_SIZE);
 
                 let mut board = String::with_capacity(20 * PAGE_SIZE);
@@ -150,14 +153,13 @@ People with any role with an Administrator privilege are always admins of this b
                     Some((p, s)) => (p.to_string(), s.to_string()),
                     None => ("?".to_string(), "?".to_string()),
                 };
-                let total_pages = map.len() / PAGE_SIZE + 1;
                 let footer = format!(
                     "Your place: #{}/{} with {}x {} | Page {}/{}",
                     place,
                     map.len(),
                     score,
                     this.config.tater_emoji.to_string(),
-                    page_num + 1,
+                    page_num,
                     total_pages
                 );
 
