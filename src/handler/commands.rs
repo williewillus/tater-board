@@ -16,6 +16,216 @@ use serenity::{
 
 use super::{Handler, HandlerWrapper};
 
+async fn generate_leaderboard(
+    leaderboard: &str,
+    args: &[&str],
+    this: &mut Handler,
+    ctx: &Context,
+    message: &Message,
+) -> Result<(), String> {
+    const PAGE_SIZE: usize = 10;
+    let map = if leaderboard == "receivers" {
+        &this.taters_got
+    } else {
+        &this.taters_given
+    };
+
+    let total_pages = map.len() / PAGE_SIZE + 1;
+    let page_num = args
+        .get(0)
+        .and_then(|page| page.parse().ok())
+        .unwrap_or(1)
+        .max(1)
+        .min(total_pages);
+
+    // high score at the front
+    let mut scores: Vec<_> = map.iter().map(|(id, count)| (*id, *count)).collect();
+    scores.sort_by_key(|(_id, count)| *count);
+    scores.reverse();
+    // de-mut it
+    let scores = scores;
+
+    let to_display = scores
+        .iter()
+        .enumerate()
+        .skip(PAGE_SIZE * (page_num - 1))
+        .take(PAGE_SIZE);
+
+    let mut board = String::with_capacity(20 * PAGE_SIZE);
+    let verb = if leaderboard == "receivers" {
+        "received"
+    } else {
+        "given"
+    };
+    for (idx, (user_id, count)) in to_display {
+        let medal = match idx + 1 {
+            1 => " ",
+            2 => " ",
+            3 => " ",
+            _ => "  ",
+        };
+        let user = ctx
+            .http
+            .get_user(user_id.0)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        board.push_str(&format!(
+            "{} {}: {} has {} {}x taters\n",
+            medal,
+            idx + 1,
+            user.mention(),
+            verb,
+            count,
+        ));
+    }
+
+    let asker_place = scores
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, (id, score))| {
+            if *id == message.author.id {
+                Some((idx + 1, score))
+            } else {
+                None
+            }
+        })
+        .next();
+    let (place, score) = match asker_place {
+        Some((p, s)) => (p.to_string(), s.to_string()),
+        None => ("?".to_string(), "?".to_string()),
+    };
+    let footer = format!(
+        "Your place: #{}/{} with {}x {} | Page {}/{}",
+        place,
+        map.len(),
+        score,
+        this.config.tater_emoji.to_string(),
+        page_num,
+        total_pages
+    );
+
+    message
+        .channel_id
+        .send_message(&ctx.http, |m| {
+            m.embed(|e| {
+                e.title(format!("Leaderboard - Taters {}", verb))
+                    .description(&board)
+                    .footer(|f| f.text(footer))
+            })
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+fn set_pin_channel(args: &[&str], this: &mut Handler) -> Result<String, String> {
+    let channel_id = args
+        .get(0)
+        .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
+    let channel_id = ChannelId(channel_id.parse::<u64>().map_err(|e| e.to_string())?);
+    this.config.pin_channel = channel_id;
+
+    let existed = !this.config.blacklisted_channels.insert(channel_id);
+    let channel_mention = channel_id.mention();
+    if !existed {
+        Ok(format!(
+            "Set pins channel to `{}` and added it to the blacklist",
+            &channel_mention
+        ))
+    } else {
+        Ok(format!(
+            "Set pins channel to `{}`, and it was already blacklisted",
+            &channel_mention
+        ))
+    }
+}
+
+fn set_threshold(args: &[&str], this: &mut Handler) -> Result<String, String> {
+    let threshold = args
+        .get(0)
+        .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
+    let threshold = threshold.parse::<u64>().map_err(|e| e.to_string())?;
+    this.config.threshold = threshold;
+    Ok(format!("Threshold changed to {}", threshold))
+}
+
+fn blacklist(args: &[&str], this: &mut Handler) -> Result<String, String> {
+    let channel_id = args
+        .get(0)
+        .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
+    let channel_id = ChannelId(channel_id.parse::<u64>().map_err(|e| e.to_string())?);
+    let existed = !this.config.blacklisted_channels.insert(channel_id);
+
+    let channel_mention = channel_id.mention();
+    if !existed {
+        Ok(format!("Blacklisted `{}`", &channel_mention))
+    } else {
+        Ok(format!("`{}` was already blacklisted", &channel_mention))
+    }
+}
+
+fn unblacklist(args: &[&str], this: &mut Handler) -> Result<String, String> {
+    let channel_id = args
+        .get(0)
+        .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
+    let channel_id = ChannelId(channel_id.parse::<u64>().map_err(|e| e.to_string())?);
+    let existed = this.config.blacklisted_channels.remove(&channel_id);
+
+    let channel_mention = channel_id.mention();
+    if existed {
+        Ok(format!("Unblacklisted `{}`", &channel_mention))
+    } else {
+        Ok(format!("`{}` was not blacklisted", &channel_mention))
+    }
+}
+
+fn set_potato(args: &[&str], this: &mut Handler) -> Result<String, String> {
+    let emoji = args
+        .get(0)
+        .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
+    let potato_react = ReactionType::try_from(*emoji).map_err(|e| e.to_string())?;
+    let old_react = this.config.tater_emoji.to_string();
+    this.config.tater_emoji = potato_react;
+    Ok(format!("Set potato emoji to {} (from {})", emoji, old_react))
+}
+
+fn admin(args: &[&str], this: &mut Handler) -> Result<String, String> {
+    let user_id = args
+        .get(0)
+        .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
+    let user_id = UserId(user_id.parse::<u64>().map_err(|e| e.to_string())?);
+    let existed = !this.config.admins.insert(user_id);
+    if !existed {
+        Ok(format!("Added `{}` as a new admin", user_id))
+    } else {
+        Ok(format!("`{}` was already an admin", user_id))
+    }
+}
+
+fn unadmin(args: &[&str], this: &mut Handler) -> Result<String, String> {
+    let user_id = args
+        .get(0)
+        .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
+    let user_id = UserId(user_id.parse::<u64>().map_err(|e| e.to_string())?);
+    let existed = this.config.admins.remove(&user_id);
+    if existed {
+        Ok(format!("Removed `{}` from being an admin", user_id))
+    } else {
+        Ok(format!("`{}` was not an admin", user_id))
+    }
+}
+
+async fn list_admins(this: &mut Handler, ctx: &Context) -> Result<String, String> {
+    let mut msg = String::from("Admins:");
+    for &id in this.config.admins.iter() {
+        let user = ctx.http.get_user(id.0).await.map_err(|e| e.to_string())?;
+        msg += format!("\n- {}", user.tag()).as_ref();
+    }
+    Ok(msg)
+}
+
 pub async fn handle_commands(
     wrapper: &HandlerWrapper,
     ctx: &Context,
@@ -29,9 +239,7 @@ pub async fn handle_commands(
     let mut handlers = wrapper.handlers.lock().await;
     let this = handlers.entry(guild_id).or_insert_with(Handler::new);
 
-    if message.author.id == uid
-        || !message.content.starts_with(&this.config.trigger_word)
-    {
+    if message.author.id == uid || !message.content.starts_with(&this.config.trigger_word) {
         return Ok(());
     }
 
@@ -84,97 +292,7 @@ People with any role with an Administrator privilege are always admins of this b
             }
         }
         leaderboard @ "receivers" | leaderboard @ "givers" => {
-            const PAGE_SIZE: usize = 10;
-            let res: Result<(), String> = try {
-                let map = if leaderboard == "receivers" {
-                    &this.taters_got
-                } else {
-                    &this.taters_given
-                };
-
-                let total_pages = map.len() / PAGE_SIZE + 1;
-                let page_num = args.get(0).and_then(|page| page.parse().ok()).unwrap_or(1)
-                    .max(1).min(total_pages);
-
-                // high score at the front
-                let mut scores: Vec<_> = map.iter().map(|(id, count)| (*id, *count)).collect();
-                scores.sort_by_key(|(_id, count)| *count);
-                scores.reverse();
-                // de-mut it
-                let scores = scores;
-
-                let to_display = scores
-                    .iter()
-                    .enumerate()
-                    .skip(PAGE_SIZE * (page_num - 1))
-                    .take(PAGE_SIZE);
-
-                let mut board = String::with_capacity(20 * PAGE_SIZE);
-                let verb = if leaderboard == "receivers" {
-                    "received"
-                } else {
-                    "given"
-                };
-                for (idx, (user_id, count)) in to_display {
-                    let medal = match idx + 1 {
-                        1 => "🏅",
-                        2 => "🥈",
-                        3 => "🥉",
-                        _ => "🎖️",
-                    };
-                    let user = ctx
-                        .http
-                        .get_user(user_id.0)
-                        .await
-                        .map_err(|e| e.to_string())?;
-
-                    board.push_str(&format!(
-                        "{} {}: {} has {} {}x taters\n",
-                        medal,
-                        idx + 1,
-                        user.mention(),
-                        verb,
-                        count,
-                    ));
-                }
-
-                let asker_place = scores
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(idx, (id, score))| {
-                        if *id == message.author.id {
-                            Some((idx + 1, score))
-                        } else {
-                            None
-                        }
-                    })
-                    .next();
-                let (place, score) = match asker_place {
-                    Some((p, s)) => (p.to_string(), s.to_string()),
-                    None => ("?".to_string(), "?".to_string()),
-                };
-                let footer = format!(
-                    "Your place: #{}/{} with {}x {} | Page {}/{}",
-                    place,
-                    map.len(),
-                    score,
-                    this.config.tater_emoji.to_string(),
-                    page_num,
-                    total_pages
-                );
-
-                message
-                    .channel_id
-                    .send_message(&ctx.http, |m| {
-                        m.embed(|e| {
-                            e.title(format!("Leaderboard - Taters {}", verb))
-                                .description(&board)
-                                .footer(|f| f.text(footer))
-                        })
-                    })
-                    .await
-                    .map_err(|e| e.to_string())?;
-            };
+            let res = generate_leaderboard(leaderboard, args, this, ctx, message).await;
             if let Err(oh_no) = res {
                 message
                     .channel_id
@@ -183,28 +301,7 @@ People with any role with an Administrator privilege are always admins of this b
             };
         }
         "set_pin_channel" if is_admin => {
-            let msg: Result<String, String> = try {
-                let channel_id = args
-                    .get(0)
-                    .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
-                let channel_id = ChannelId(channel_id.parse::<u64>().map_err(|e| e.to_string())?);
-                this.config.pin_channel = channel_id;
-
-                let existed = !this.config.blacklisted_channels.insert(channel_id);
-                let channel_mention = channel_id.mention();
-                if !existed {
-                    format!(
-                        "Set pins channel to `{}` and added it to the blacklist",
-                        &channel_mention
-                    )
-                } else {
-                    format!(
-                        "Set pins channel to `{}`, and it was already blacklisted",
-                        &channel_mention
-                    )
-                }
-            };
-            match msg {
+            match set_pin_channel(args, this) {
                 Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
                 Err(oh_no) => {
                     message
@@ -215,15 +312,7 @@ People with any role with an Administrator privilege are always admins of this b
             };
         }
         "set_threshold" if is_admin => {
-            let msg: Result<String, String> = try {
-                let threshold = args
-                    .get(0)
-                    .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
-                let threshold = threshold.parse::<u64>().map_err(|e| e.to_string())?;
-                this.config.threshold = threshold;
-                format!("Threshold changed to {}", threshold)
-            };
-            match msg {
+            match set_threshold(args, this) {
                 Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
                 Err(oh_no) => {
                     message
@@ -234,21 +323,7 @@ People with any role with an Administrator privilege are always admins of this b
             };
         }
         "blacklist" if is_admin => {
-            let msg: Result<String, String> = try {
-                let channel_id = args
-                    .get(0)
-                    .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
-                let channel_id = ChannelId(channel_id.parse::<u64>().map_err(|e| e.to_string())?);
-                let existed = !this.config.blacklisted_channels.insert(channel_id);
-
-                let channel_mention = channel_id.mention();
-                if !existed {
-                    format!("Blacklisted `{}`", &channel_mention)
-                } else {
-                    format!("`{}` was already blacklisted", &channel_mention)
-                }
-            };
-            match msg {
+            match blacklist(args, this) {
                 Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
                 Err(oh_no) => {
                     message
@@ -259,21 +334,7 @@ People with any role with an Administrator privilege are always admins of this b
             };
         }
         "unblacklist" if is_admin => {
-            let msg: Result<String, String> = try {
-                let channel_id = args
-                    .get(0)
-                    .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
-                let channel_id = ChannelId(channel_id.parse::<u64>().map_err(|e| e.to_string())?);
-                let existed = this.config.blacklisted_channels.remove(&channel_id);
-
-                let channel_mention = channel_id.mention();
-                if existed {
-                    format!("Unblacklisted `{}`", &channel_mention)
-                } else {
-                    format!("`{}` was not blacklisted", &channel_mention)
-                }
-            };
-            match msg {
+            match unblacklist(args, this) {
                 Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
                 Err(oh_no) => {
                     message
@@ -294,16 +355,7 @@ People with any role with an Administrator privilege are always admins of this b
             message.channel_id.say(&ctx.http, msg).await?;
         }
         "set_potato" if is_admin => {
-            let msg: Result<String, String> = try {
-                let emoji = args
-                    .get(0)
-                    .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
-                let potato_react = ReactionType::try_from(*emoji).map_err(|e| e.to_string())?;
-                let old_react = this.config.tater_emoji.to_string();
-                this.config.tater_emoji = potato_react;
-                format!("Set potato emoji to {} (from {})", emoji, old_react)
-            };
-            match msg {
+            match set_potato(args, this) {
                 Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
                 Err(oh_no) => {
                     message
@@ -314,19 +366,7 @@ People with any role with an Administrator privilege are always admins of this b
             };
         }
         "admin" if is_admin => {
-            let msg: Result<String, String> = try {
-                let user_id = args
-                    .get(0)
-                    .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
-                let user_id = UserId(user_id.parse::<u64>().map_err(|e| e.to_string())?);
-                let existed = !this.config.admins.insert(user_id);
-                if !existed {
-                    format!("Added `{}` as a new admin", user_id)
-                } else {
-                    format!("`{}` was already an admin", user_id)
-                }
-            };
-            match msg {
+            match admin(args, this) {
                 Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
                 Err(oh_no) => {
                     message
@@ -337,19 +377,7 @@ People with any role with an Administrator privilege are always admins of this b
             };
         }
         "unadmin" if is_admin => {
-            let msg: Result<String, String> = try {
-                let user_id = args
-                    .get(0)
-                    .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
-                let user_id = UserId(user_id.parse::<u64>().map_err(|e| e.to_string())?);
-                let existed = this.config.admins.remove(&user_id);
-                if existed {
-                    format!("Removed `{}` from being an admin", user_id)
-                } else {
-                    format!("`{}` was not an admin", user_id)
-                }
-            };
-            match msg {
+            match unadmin(args, this) {
                 Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
                 Err(oh_no) => {
                     message
@@ -360,15 +388,7 @@ People with any role with an Administrator privilege are always admins of this b
             };
         }
         "list_admins" if is_admin => {
-            let msg: Result<String, String> = try {
-                let mut msg = String::from("Admins:");
-                for &id in this.config.admins.iter() {
-                    let user = ctx.http.get_user(id.0).await.map_err(|e| e.to_string())?;
-                    msg += format!("\n- {}", user.tag()).as_ref();
-                }
-                msg
-            };
-            match msg {
+            match list_admins(this, ctx).await {
                 Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
                 Err(oh_no) => {
                     message
@@ -402,8 +422,9 @@ People with any role with an Administrator privilege are always admins of this b
                 .channel_id
                 .send_message(&ctx.http, |m| {
                     m.content(format!("Unknown command: {}", command))
-                        .allowed_mentions(|a| a.empty_parse())}
-                ).await?;
+                        .allowed_mentions(|a| a.empty_parse())
+                })
+                .await?;
         }
     }
 

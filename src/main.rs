@@ -1,5 +1,3 @@
-#![feature(try_blocks)]
-
 mod handler;
 
 use std::{env, error::Error, path::PathBuf};

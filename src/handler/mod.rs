@@ -215,6 +215,94 @@ impl Handler {
             taters_given: HashMap::new(),
         }
     }
+
+    async fn do_add_tater(&mut self, ctx: &Context, reaction: &Reaction, bot_uid: UserId) -> Result<(), anyhow::Error> {
+        // ok this is a tater!
+        let giver = reaction.user(&ctx.http).await.context("Getting user for reaction")?;
+
+        // Update taters received and taters on this message via the cache
+        let tatered_message = {
+            let tatered_message = self.tatered_messages.entry(reaction.message_id);
+            let tatered_message = match tatered_message {
+                hash_map::Entry::Occupied(o) => o.into_mut(),
+                hash_map::Entry::Vacant(v) => {
+                    // this is empty, so we need to fill the cache
+                    let message = reaction.message(&ctx.http).await.with_context(|| "Getting message for reaction")?;
+                    if message.author.id == bot_uid {
+                        return Ok(());
+                    }
+                    v.insert(TateredMessage::new(message.author.id, 0, None))
+                }
+            };
+            if Some(tatered_message.sender) == reaction.user_id {
+                // hey you can't do your own message!
+                return Ok(());
+            }
+            // one more potato on this message
+            tatered_message.count += 1;
+            // smuggle out the message to avoid borrow errors
+            tatered_message.clone()
+        };
+
+        // the giver gave one more potato
+        *self.taters_given.entry(giver.id).or_insert(0) += 1;
+        // this person got one more potato
+        *self.taters_got.entry(tatered_message.sender).or_insert(0) += 1;
+
+        let new_pin_id = update_pin_message(self, &tatered_message, &reaction, &ctx).await.context("Update pin message")?;
+        if let Some(tm) = self.tatered_messages.get_mut(&reaction.message_id) {
+            tm.pin_id = new_pin_id
+        }
+        Ok(())
+    }
+
+    async fn do_remove_tater(&mut self, ctx: &Context, reaction: &Reaction) -> Result<(), anyhow::Error> {
+        if self.config.tater_emoji != reaction.emoji {
+            return Ok(());
+        }
+        if self
+            .config
+            .blacklisted_channels
+            .contains(&reaction.channel_id)
+        {
+            return Ok(());
+        }
+        // ok this is a tater!
+        let ungiver = reaction.user(&ctx.http).await?;
+        log::trace!("tater removed by {:?} from message {:?}", reaction.user_id, reaction.message_id);
+
+        // Update taters received and taters on this message via the cache
+        let tatered_message = {
+            let tatered_message = self.tatered_messages.entry(reaction.message_id);
+            let tatered_message = match tatered_message {
+                hash_map::Entry::Occupied(o) => o.into_mut(),
+                hash_map::Entry::Vacant(..) => {
+                    // this should never be an empty entry
+                    log::error!("`reaction_remove`: there was an empty entry in `tatered_messages`. This probably means someone un-reacted to a message this bot did not know about, from before the bot was introduced.");
+                    return Ok(());
+                }
+            };
+            if Some(tatered_message.sender) == reaction.user_id {
+                // hey you can't do your own message!
+                return Ok(());
+            }
+            // one fewer potato on this message
+            tatered_message.count -= 1;
+            // smuggle out the message to avoid borrow errors
+            tatered_message.clone()
+        };
+
+        // the ungiver reduces potato
+        *self.taters_given.entry(ungiver.id).or_insert(0) -= 1;
+        // this person lost a potato
+        *self.taters_got.entry(tatered_message.sender).or_insert(0) -= 1;
+
+        let new_pin_id = update_pin_message(self, &tatered_message, &reaction, &ctx).await.context("update_pin_message")?;
+        if let Some(tm) = self.tatered_messages.get_mut(&reaction.message_id) {
+            tm.pin_id = new_pin_id
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -249,45 +337,8 @@ impl EventHandler for HandlerWrapper {
         }
 
         log::trace!("tater added by {:?} to message {:?}", reaction.user_id, reaction.message_id);
-        let res: Result<(), anyhow::Error> = try {
-            // ok this is a tater!
-            let giver = reaction.user(&ctx.http).await.context("Getting user for reaction")?;
-
-            // Update taters received and taters on this message via the cache
-            let tatered_message = {
-                let tatered_message = this.tatered_messages.entry(reaction.message_id);
-                let tatered_message = match tatered_message {
-                    hash_map::Entry::Occupied(o) => o.into_mut(),
-                    hash_map::Entry::Vacant(v) => {
-                        // this is empty, so we need to fill the cache
-                        let message = reaction.message(&ctx.http).await.with_context(|| "Getting message for reaction")?;
-                        if message.author.id == self.bot_uid().await {
-                            return;
-                        }
-                        v.insert(TateredMessage::new(message.author.id, 0, None))
-                    }
-                };
-                if Some(tatered_message.sender) == reaction.user_id {
-                    // hey you can't do your own message!
-                    return;
-                }
-                // one more potato on this message
-                tatered_message.count += 1;
-                // smuggle out the message to avoid borrow errors
-                tatered_message.clone()
-            };
-
-            // the giver gave one more potato
-            *this.taters_given.entry(giver.id).or_insert(0) += 1;
-            // this person got one more potato
-            *this.taters_got.entry(tatered_message.sender).or_insert(0) += 1;
-
-            let new_pin_id = update_pin_message(this, &tatered_message, &reaction, &ctx).await.context("Update pin message")?;
-            if let Some(tm) = this.tatered_messages.get_mut(&reaction.message_id) {
-                tm.pin_id = new_pin_id
-            }
-        };
-        if let Err(oh_no) = res {
+        let bot_uid = self.bot_uid().await;
+        if let Err(oh_no) = this.do_add_tater(&ctx, &reaction, bot_uid).await {
             log::error!("`reaction_add`: {:?}", oh_no);
         }
     }
@@ -300,53 +351,7 @@ impl EventHandler for HandlerWrapper {
         let mut handlers = self.handlers.lock().await;
         let this = handlers.entry(guild_id).or_insert_with(Handler::new);
 
-        let res: Result<(), anyhow::Error> = try {
-            if this.config.tater_emoji != reaction.emoji {
-                return;
-            }
-            if this
-                .config
-                .blacklisted_channels
-                .contains(&reaction.channel_id)
-            {
-                return;
-            }
-            // ok this is a tater!
-            let ungiver = reaction.user(&ctx.http).await?;
-            log::trace!("tater removed by {:?} from message {:?}", reaction.user_id, reaction.message_id);
-
-            // Update taters received and taters on this message via the cache
-            let tatered_message = {
-                let tatered_message = this.tatered_messages.entry(reaction.message_id);
-                let tatered_message = match tatered_message {
-                    hash_map::Entry::Occupied(o) => o.into_mut(),
-                    hash_map::Entry::Vacant(..) => {
-                        // this should never be an empty entry
-                        log::error!("`reaction_remove`: there was an empty entry in `tatered_messages`. This probably means someone un-reacted to a message this bot did not know about, from before the bot was introduced.");
-                        return;
-                    }
-                };
-                if Some(tatered_message.sender) == reaction.user_id {
-                    // hey you can't do your own message!
-                    return;
-                }
-                // one fewer potato on this message
-                tatered_message.count -= 1;
-                // smuggle out the message to avoid borrow errors
-                tatered_message.clone()
-            };
-
-            // the ungiver reduces potato
-            *this.taters_given.entry(ungiver.id).or_insert(0) -= 1;
-            // this person lost a potato
-            *this.taters_got.entry(tatered_message.sender).or_insert(0) -= 1;
-
-            let new_pin_id = update_pin_message(this, &tatered_message, &reaction, &ctx).await.context("update_pin_message")?;
-            if let Some(tm) = this.tatered_messages.get_mut(&reaction.message_id) {
-                tm.pin_id = new_pin_id
-            }
-        };
-        if let Err(oh_no) = res {
+        if let Err(oh_no) = this.do_remove_tater(&ctx, &reaction).await {
             log::error!("`reaction_remove`: {:?}", oh_no);
         }
     }
