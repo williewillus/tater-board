@@ -417,15 +417,7 @@ People with any role with an Administrator privilege are always admins of this b
                 }
             };
         }
-        command => {
-            message
-                .channel_id
-                .send_message(&ctx.http, |m| {
-                    m.content(format!("Unknown command: {}", command))
-                        .allowed_mentions(|a| a.empty_parse())
-                })
-                .await?;
-        }
+        _ => {}
     }
 
     if is_admin {
