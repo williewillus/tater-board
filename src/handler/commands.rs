@@ -327,7 +327,9 @@ People with any role with an Administrator privilege are always admins of this b
 
     match res {
         Ok(msg) => {
-            message.channel_id.say(&ctx.http, msg).await?;
+            if !msg.is_empty() {
+                message.channel_id.say(&ctx.http, msg).await?;
+            }
         },
         Err(e) => {
             message.channel_id.say(&ctx.http, format!("An error occured: \n{}", e)).await?;
