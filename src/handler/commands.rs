@@ -22,7 +22,7 @@ async fn generate_leaderboard(
     this: &mut Handler,
     ctx: &Context,
     message: &Message,
-) -> Result<(), String> {
+) -> Result<String, anyhow::Error> {
     const PAGE_SIZE: usize = 10;
     let map = if leaderboard == "receivers" {
         &this.taters_got
@@ -67,8 +67,7 @@ async fn generate_leaderboard(
         let user = ctx
             .http
             .get_user(user_id.0)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
         board.push_str(&format!(
             "{} {}: {} has {} {}x taters\n",
@@ -114,17 +113,16 @@ async fn generate_leaderboard(
                     .footer(|f| f.text(footer))
             })
         })
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
-    Ok(())
+    Ok(String::new())
 }
 
-fn set_pin_channel(args: &[&str], this: &mut Handler) -> Result<String, String> {
+fn set_pin_channel(args: &[&str], this: &mut Handler) -> Result<String, anyhow::Error> {
     let channel_id = args
         .get(0)
-        .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
-    let channel_id = ChannelId(channel_id.parse::<u64>().map_err(|e| e.to_string())?);
+        .ok_or_else(|| anyhow!("Not enough arguments (1 expected)"))?;
+    let channel_id = ChannelId(channel_id.parse::<u64>()?);
     this.config.pin_channel = channel_id;
 
     let existed = !this.config.blacklisted_channels.insert(channel_id);
@@ -142,20 +140,20 @@ fn set_pin_channel(args: &[&str], this: &mut Handler) -> Result<String, String> 
     }
 }
 
-fn set_threshold(args: &[&str], this: &mut Handler) -> Result<String, String> {
+fn set_threshold(args: &[&str], this: &mut Handler) -> Result<String, anyhow::Error> {
     let threshold = args
         .get(0)
-        .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
-    let threshold = threshold.parse::<u64>().map_err(|e| e.to_string())?;
+        .ok_or_else(|| anyhow!("Not enough arguments (1 expected)"))?;
+    let threshold = threshold.parse::<u64>()?;
     this.config.threshold = threshold;
     Ok(format!("Threshold changed to {}", threshold))
 }
 
-fn blacklist(args: &[&str], this: &mut Handler) -> Result<String, String> {
+fn blacklist(args: &[&str], this: &mut Handler) -> Result<String, anyhow::Error> {
     let channel_id = args
         .get(0)
-        .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
-    let channel_id = ChannelId(channel_id.parse::<u64>().map_err(|e| e.to_string())?);
+        .ok_or_else(|| anyhow!("Not enough arguments (1 expected)"))?;
+    let channel_id = ChannelId(channel_id.parse::<u64>()?);
     let existed = !this.config.blacklisted_channels.insert(channel_id);
 
     let channel_mention = channel_id.mention();
@@ -166,11 +164,11 @@ fn blacklist(args: &[&str], this: &mut Handler) -> Result<String, String> {
     }
 }
 
-fn unblacklist(args: &[&str], this: &mut Handler) -> Result<String, String> {
+fn unblacklist(args: &[&str], this: &mut Handler) -> Result<String, anyhow::Error> {
     let channel_id = args
         .get(0)
-        .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
-    let channel_id = ChannelId(channel_id.parse::<u64>().map_err(|e| e.to_string())?);
+        .ok_or_else(|| anyhow!("Not enough arguments (1 expected)"))?;
+    let channel_id = ChannelId(channel_id.parse::<u64>()?);
     let existed = this.config.blacklisted_channels.remove(&channel_id);
 
     let channel_mention = channel_id.mention();
@@ -181,21 +179,21 @@ fn unblacklist(args: &[&str], this: &mut Handler) -> Result<String, String> {
     }
 }
 
-fn set_potato(args: &[&str], this: &mut Handler) -> Result<String, String> {
+fn set_potato(args: &[&str], this: &mut Handler) -> Result<String, anyhow::Error> {
     let emoji = args
         .get(0)
-        .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
-    let potato_react = ReactionType::try_from(*emoji).map_err(|e| e.to_string())?;
+        .ok_or_else(|| anyhow!("Not enough arguments (1 expected)"))?;
+    let potato_react = ReactionType::try_from(*emoji)?;
     let old_react = this.config.tater_emoji.to_string();
     this.config.tater_emoji = potato_react;
     Ok(format!("Set potato emoji to {} (from {})", emoji, old_react))
 }
 
-fn admin(args: &[&str], this: &mut Handler) -> Result<String, String> {
+fn admin(args: &[&str], this: &mut Handler) -> Result<String, anyhow::Error> {
     let user_id = args
         .get(0)
-        .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
-    let user_id = UserId(user_id.parse::<u64>().map_err(|e| e.to_string())?);
+        .ok_or_else(|| anyhow!("Not enough arguments (1 expected)"))?;
+    let user_id = UserId(user_id.parse::<u64>()?);
     let existed = !this.config.admins.insert(user_id);
     if !existed {
         Ok(format!("Added `{}` as a new admin", user_id))
@@ -204,11 +202,11 @@ fn admin(args: &[&str], this: &mut Handler) -> Result<String, String> {
     }
 }
 
-fn unadmin(args: &[&str], this: &mut Handler) -> Result<String, String> {
+fn unadmin(args: &[&str], this: &mut Handler) -> Result<String, anyhow::Error> {
     let user_id = args
         .get(0)
-        .ok_or_else(|| String::from("Not enough arguments (1 expected)"))?;
-    let user_id = UserId(user_id.parse::<u64>().map_err(|e| e.to_string())?);
+        .ok_or_else(|| anyhow!("Not enough arguments (1 expected)"))?;
+    let user_id = UserId(user_id.parse::<u64>()?);
     let existed = this.config.admins.remove(&user_id);
     if existed {
         Ok(format!("Removed `{}` from being an admin", user_id))
@@ -217,10 +215,10 @@ fn unadmin(args: &[&str], this: &mut Handler) -> Result<String, String> {
     }
 }
 
-async fn list_admins(this: &mut Handler, ctx: &Context) -> Result<String, String> {
+async fn list_admins(this: &mut Handler, ctx: &Context) -> Result<String, anyhow::Error> {
     let mut msg = String::from("Admins:");
     for &id in this.config.admins.iter() {
-        let user = ctx.http.get_user(id.0).await.map_err(|e| e.to_string())?;
+        let user = ctx.http.get_user(id.0).await?;
         msg += format!("\n- {}", user.tag()).as_ref();
     }
     Ok(msg)
@@ -268,7 +266,7 @@ pub async fn handle_commands(
     let cmd = split[1];
     let args = &split[2..];
 
-    match cmd {
+    let res = match cmd {
         "help" => {
             const HELP: &str = r" === PotatoBoard Help ===
 - `help`: Get this message.
@@ -286,117 +284,48 @@ pub async fn handle_commands(
 - `list_admins`: Print a list of admins.
 - `save`: Flush any in-memory state to disk.
 People with any role with an Administrator privilege are always admins of this bot.";
-            message.channel_id.say(&ctx.http, HELP).await?;
+            let mut res = HELP.to_owned();
             if is_admin {
-                message.channel_id.say(&ctx.http, ADMIN_HELP).await?;
+                res.push('\n');
+                res.push_str(ADMIN_HELP);
             }
+            Ok(res)
         }
         leaderboard @ "receivers" | leaderboard @ "givers" => {
-            let res = generate_leaderboard(leaderboard, args, this, ctx, message).await;
-            if let Err(oh_no) = res {
-                message
-                    .channel_id
-                    .say(&ctx.http, format!("An error occured: \n{}", oh_no))
-                    .await?;
-            };
+            generate_leaderboard(leaderboard, args, this, ctx, message).await
         }
         "set_pin_channel" if is_admin => {
-            match set_pin_channel(args, this) {
-                Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
-                Err(oh_no) => {
-                    message
-                        .channel_id
-                        .say(&ctx.http, format!("An error occured: \n{}", oh_no))
-                        .await?
-                }
-            };
+            set_pin_channel(args, this)
         }
         "set_threshold" if is_admin => {
-            match set_threshold(args, this) {
-                Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
-                Err(oh_no) => {
-                    message
-                        .channel_id
-                        .say(&ctx.http, format!("An error occured: \n{}", oh_no))
-                        .await?
-                }
-            };
+            set_threshold(args, this)
         }
         "blacklist" if is_admin => {
-            match blacklist(args, this) {
-                Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
-                Err(oh_no) => {
-                    message
-                        .channel_id
-                        .say(&ctx.http, format!("An error occured: \n{}", oh_no))
-                        .await?
-                }
-            };
+            blacklist(args, this)
         }
         "unblacklist" if is_admin => {
-            match unblacklist(args, this) {
-                Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
-                Err(oh_no) => {
-                    message
-                        .channel_id
-                        .say(&ctx.http, format!("An error occured: \n{}", oh_no))
-                        .await?
-                }
-            };
+            unblacklist(args, this)
         }
         "show_blacklist" if is_admin => {
-            let msg = this
+            Ok(this
                 .config
                 .blacklisted_channels
                 .iter()
                 .map(|c| format!("- {}", c.mention()))
                 .collect::<Vec<_>>()
-                .join("\n");
-            message.channel_id.say(&ctx.http, msg).await?;
+                .join("\n"))
         }
         "set_potato" if is_admin => {
-            match set_potato(args, this) {
-                Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
-                Err(oh_no) => {
-                    message
-                        .channel_id
-                        .say(&ctx.http, format!("An error occured: \n{}", oh_no))
-                        .await?
-                }
-            };
+            set_potato(args, this)
         }
         "admin" if is_admin => {
-            match admin(args, this) {
-                Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
-                Err(oh_no) => {
-                    message
-                        .channel_id
-                        .say(&ctx.http, format!("An error occured: \n{}", oh_no))
-                        .await?
-                }
-            };
+            admin(args, this)
         }
         "unadmin" if is_admin => {
-            match unadmin(args, this) {
-                Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
-                Err(oh_no) => {
-                    message
-                        .channel_id
-                        .say(&ctx.http, format!("An error occured: \n{}", oh_no))
-                        .await?
-                }
-            };
+            unadmin(args, this)
         }
         "list_admins" if is_admin => {
-            match list_admins(this, ctx).await {
-                Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
-                Err(oh_no) => {
-                    message
-                        .channel_id
-                        .say(&ctx.http, format!("An error occured: \n{}", oh_no))
-                        .await?
-                }
-            };
+            list_admins(this, ctx).await
         }
         "save" if is_admin => {
             // we only need to save taters cause, as this is an admin command, config is about to get saved
@@ -407,17 +336,18 @@ People with any role with an Administrator privilege are always admins of this b
             } else {
                 Err(anyhow!("There was no guild ID (are you in a PM?)"))
             };
-            match msg {
-                Ok(msg) => message.channel_id.say(&ctx.http, msg).await?,
-                Err(oh_no) => {
-                    message
-                        .channel_id
-                        .say(&ctx.http, format!("An error occured: \n{}", oh_no))
-                        .await?
-                }
-            };
+            msg
         }
-        _ => {}
+        _ => Ok(String::new())
+    };
+
+    match res {
+        Ok(msg) => {
+            message.channel_id.say(&ctx.http, msg).await?;
+        },
+        Err(e) => {
+            message.channel_id.say(&ctx.http, format!("An error occured: \n{}", e)).await?;
+        },
     }
 
     if is_admin {
