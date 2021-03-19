@@ -114,6 +114,31 @@ async fn generate_leaderboard(
     Ok(String::new())
 }
 
+async fn generate_csv(args: &[&str], this: &mut Handler, ctx: &Context, msg: &Message) -> Result<String, anyhow::Error> {
+    fn generate(map: &std::collections::HashMap<UserId, u64>) -> String {
+        let mut result = "uid,value".to_owned();
+        for (k, v) in map {
+            result.push('\n');
+            result.push_str(&format!("{},{}", k.0, v));
+        }
+        result
+    }
+    use serenity::http::AttachmentType;
+    let data = match args.get(0) {
+        Some(&"receivers") => generate(&this.taters_got),
+        Some(&"givers") => generate(&this.taters_given),
+        _ => return Err(anyhow!("Unknown report"))
+    };
+    let attachment = AttachmentType::Bytes {
+        data: data.into_bytes().into(),
+        filename: "stats.csv".to_owned(),
+    };
+
+    msg.channel_id.send_files(&ctx.http, Some(attachment), |m| m).await?;
+
+    Ok(String::new())
+}
+
 fn set_pin_channel(args: &[&str], this: &mut Handler) -> Result<String, anyhow::Error> {
     let channel_id = args
         .get(0)
@@ -290,6 +315,7 @@ People with any role with an Administrator privilege are always admins of this b
         leaderboard @ "receivers" | leaderboard @ "givers" => {
             generate_leaderboard(leaderboard, args, this, ctx, message).await
         }
+        "csv" if is_admin => generate_csv(args, this, ctx, message).await,
         "set_pin_channel" if is_admin => set_pin_channel(args, this),
         "set_threshold" if is_admin => set_threshold(args, this),
         "blacklist" if is_admin => blacklist(args, this),
