@@ -64,16 +64,12 @@ async fn generate_leaderboard(
             3 => " ",
             _ => "  ",
         };
-        let user = ctx
-            .http
-            .get_user(user_id.0)
-            .await?;
 
         board.push_str(&format!(
             "{} {}: {} has {} {}x taters\n",
             medal,
             idx + 1,
-            user.mention(),
+            user_id.mention(),
             verb,
             count,
         ));
@@ -215,11 +211,11 @@ fn unadmin(args: &[&str], this: &mut Handler) -> Result<String, anyhow::Error> {
     }
 }
 
-async fn list_admins(this: &mut Handler, ctx: &Context) -> Result<String, anyhow::Error> {
+async fn list_admins(this: &mut Handler) -> Result<String, anyhow::Error> {
     let mut msg = String::from("Admins:");
-    for &id in this.config.admins.iter() {
-        let user = ctx.http.get_user(id.0).await?;
-        msg += format!("\n- {}", user.tag()).as_ref();
+    for id in &this.config.admins {
+        msg.push_str("\n- ");
+        msg.push_str(&id.mention());
     }
     Ok(msg)
 }
@@ -310,7 +306,7 @@ People with any role with an Administrator privilege are always admins of this b
         "set_potato" if is_admin => set_potato(args, this),
         "admin" if is_admin => admin(args, this),
         "unadmin" if is_admin => unadmin(args, this),
-        "list_admins" if is_admin => list_admins(this, ctx).await,
+        "list_admins" if is_admin => list_admins(this).await,
         "save" if is_admin => {
             // we only need to save taters cause, as this is an admin command, config is about to get saved
             let msg = if let Some(id) = message.guild_id {
