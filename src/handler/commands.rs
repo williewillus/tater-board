@@ -294,18 +294,10 @@ People with any role with an Administrator privilege are always admins of this b
         leaderboard @ "receivers" | leaderboard @ "givers" => {
             generate_leaderboard(leaderboard, args, this, ctx, message).await
         }
-        "set_pin_channel" if is_admin => {
-            set_pin_channel(args, this)
-        }
-        "set_threshold" if is_admin => {
-            set_threshold(args, this)
-        }
-        "blacklist" if is_admin => {
-            blacklist(args, this)
-        }
-        "unblacklist" if is_admin => {
-            unblacklist(args, this)
-        }
+        "set_pin_channel" if is_admin => set_pin_channel(args, this),
+        "set_threshold" if is_admin => set_threshold(args, this),
+        "blacklist" if is_admin => blacklist(args, this),
+        "unblacklist" if is_admin => unblacklist(args, this),
         "show_blacklist" if is_admin => {
             Ok(this
                 .config
@@ -315,18 +307,10 @@ People with any role with an Administrator privilege are always admins of this b
                 .collect::<Vec<_>>()
                 .join("\n"))
         }
-        "set_potato" if is_admin => {
-            set_potato(args, this)
-        }
-        "admin" if is_admin => {
-            admin(args, this)
-        }
-        "unadmin" if is_admin => {
-            unadmin(args, this)
-        }
-        "list_admins" if is_admin => {
-            list_admins(this, ctx).await
-        }
+        "set_potato" if is_admin => set_potato(args, this),
+        "admin" if is_admin => admin(args, this),
+        "unadmin" if is_admin => unadmin(args, this),
+        "list_admins" if is_admin => list_admins(this, ctx).await,
         "save" if is_admin => {
             // we only need to save taters cause, as this is an admin command, config is about to get saved
             let msg = if let Some(id) = message.guild_id {
