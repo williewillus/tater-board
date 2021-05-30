@@ -240,7 +240,7 @@ async fn list_admins(this: &mut Handler) -> Result<String, anyhow::Error> {
     let mut msg = String::from("Admins:");
     for id in &this.config.admins {
         msg.push_str("\n- ");
-        msg.push_str(&id.mention());
+        msg.push_str(&id.mention().to_string());
     }
     Ok(msg)
 }

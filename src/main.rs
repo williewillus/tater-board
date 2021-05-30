@@ -20,10 +20,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tokio::fs::create_dir_all(&path_to_save).await?;
 
     let mut client = Client::builder(&token)
-        .add_intent(GatewayIntents::GUILDS)
-        .add_intent(GatewayIntents::GUILD_EMOJIS)
-        .add_intent(GatewayIntents::GUILD_MESSAGES)
-        .add_intent(GatewayIntents::GUILD_MESSAGE_REACTIONS)
+        .intents(
+            GatewayIntents::GUILDS
+                | GatewayIntents::GUILD_EMOJIS
+                | GatewayIntents::GUILD_MESSAGES
+                | GatewayIntents::GUILD_MESSAGE_REACTIONS
+        )
         .event_handler(HandlerWrapper::new(path_to_save)?)
         .await?;
 
