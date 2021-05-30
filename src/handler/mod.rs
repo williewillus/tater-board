@@ -9,7 +9,7 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{Context as AnyhowContext, anyhow, bail};
+use anyhow::{anyhow, bail, Context as AnyhowContext};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serenity::{
@@ -216,9 +216,17 @@ impl Handler {
         }
     }
 
-    async fn do_add_tater(&mut self, ctx: &Context, reaction: &Reaction, bot_uid: UserId) -> Result<(), anyhow::Error> {
+    async fn do_add_tater(
+        &mut self,
+        ctx: &Context,
+        reaction: &Reaction,
+        bot_uid: UserId,
+    ) -> Result<(), anyhow::Error> {
         // ok this is a tater!
-        let giver = reaction.user(&ctx.http).await.context("Getting user for reaction")?;
+        let giver = reaction
+            .user(&ctx.http)
+            .await
+            .context("Getting user for reaction")?;
 
         // Update taters received and taters on this message via the cache
         let tatered_message = {
@@ -227,7 +235,10 @@ impl Handler {
                 hash_map::Entry::Occupied(o) => o.into_mut(),
                 hash_map::Entry::Vacant(v) => {
                     // this is empty, so we need to fill the cache
-                    let message = reaction.message(&ctx.http).await.with_context(|| "Getting message for reaction")?;
+                    let message = reaction
+                        .message(&ctx.http)
+                        .await
+                        .with_context(|| "Getting message for reaction")?;
                     if message.author.id == bot_uid {
                         return Ok(());
                     }
@@ -249,14 +260,20 @@ impl Handler {
         // this person got one more potato
         *self.taters_got.entry(tatered_message.sender).or_insert(0) += 1;
 
-        let new_pin_id = update_pin_message(self, &tatered_message, &reaction, &ctx).await.context("Update pin message")?;
+        let new_pin_id = update_pin_message(self, &tatered_message, &reaction, &ctx)
+            .await
+            .context("Update pin message")?;
         if let Some(tm) = self.tatered_messages.get_mut(&reaction.message_id) {
             tm.pin_id = new_pin_id
         }
         Ok(())
     }
 
-    async fn do_remove_tater(&mut self, ctx: &Context, reaction: &Reaction) -> Result<(), anyhow::Error> {
+    async fn do_remove_tater(
+        &mut self,
+        ctx: &Context,
+        reaction: &Reaction,
+    ) -> Result<(), anyhow::Error> {
         if self.config.tater_emoji != reaction.emoji {
             return Ok(());
         }
@@ -269,7 +286,11 @@ impl Handler {
         }
         // ok this is a tater!
         let ungiver = reaction.user(&ctx.http).await?;
-        log::trace!("tater removed by {:?} from message {:?}", reaction.user_id, reaction.message_id);
+        log::trace!(
+            "tater removed by {:?} from message {:?}",
+            reaction.user_id,
+            reaction.message_id
+        );
 
         // Update taters received and taters on this message via the cache
         let tatered_message = {
@@ -297,7 +318,9 @@ impl Handler {
         // this person lost a potato
         *self.taters_got.entry(tatered_message.sender).or_insert(0) -= 1;
 
-        let new_pin_id = update_pin_message(self, &tatered_message, &reaction, &ctx).await.context("update_pin_message")?;
+        let new_pin_id = update_pin_message(self, &tatered_message, &reaction, &ctx)
+            .await
+            .context("update_pin_message")?;
         if let Some(tm) = self.tatered_messages.get_mut(&reaction.message_id) {
             tm.pin_id = new_pin_id
         }
@@ -310,7 +333,8 @@ impl EventHandler for HandlerWrapper {
     async fn ready(&self, _: Context, ready: Ready) {
         log::info!(
             "{}#{} is connected!",
-            ready.user.name, ready.user.discriminator
+            ready.user.name,
+            ready.user.discriminator
         );
         let mut g = self.bot_user_id.write().await;
         *g = Some(ready.user.id);
@@ -336,7 +360,11 @@ impl EventHandler for HandlerWrapper {
             return;
         }
 
-        log::trace!("tater added by {:?} to message {:?}", reaction.user_id, reaction.message_id);
+        log::trace!(
+            "tater added by {:?} to message {:?}",
+            reaction.user_id,
+            reaction.message_id
+        );
         let bot_uid = self.bot_uid().await;
         if let Err(oh_no) = this.do_add_tater(&ctx, &reaction, bot_uid).await {
             log::error!("`reaction_add`: {:?}", oh_no);
@@ -413,8 +441,16 @@ async fn update_pin_message(
             let mut msg = ctx
                 .http
                 .get_message(this.config.pin_channel.0, mid.0)
-                .await.with_context(|| format!("getting message {} from channel {}", mid.0, this.config.pin_channel.0))?;
-            msg.edit(&ctx.http, |m| m.content(content)).await.context("updating pin text")?;
+                .await
+                .with_context(|| {
+                    format!(
+                        "getting message {} from channel {}",
+                        mid.0, this.config.pin_channel.0
+                    )
+                })?;
+            msg.edit(&ctx.http, |m| m.content(content))
+                .await
+                .context("updating pin text")?;
             // Don't change anything
             Ok(tatered_message.pin_id)
         }

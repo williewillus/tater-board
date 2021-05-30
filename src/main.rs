@@ -3,7 +3,7 @@ mod handler;
 use std::{env, error::Error, path::PathBuf};
 
 use handler::HandlerWrapper;
-use serenity::{Client, client::bridge::gateway::GatewayIntents};
+use serenity::{client::bridge::gateway::GatewayIntents, Client};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             GatewayIntents::GUILDS
                 | GatewayIntents::GUILD_EMOJIS
                 | GatewayIntents::GUILD_MESSAGES
-                | GatewayIntents::GUILD_MESSAGE_REACTIONS
+                | GatewayIntents::GUILD_MESSAGE_REACTIONS,
         )
         .event_handler(HandlerWrapper::new(path_to_save)?)
         .await?;

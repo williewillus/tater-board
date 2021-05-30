@@ -114,7 +114,12 @@ async fn generate_leaderboard(
     Ok(String::new())
 }
 
-async fn generate_csv(args: &[&str], this: &mut Handler, ctx: &Context, msg: &Message) -> Result<String, anyhow::Error> {
+async fn generate_csv(
+    args: &[&str],
+    this: &mut Handler,
+    ctx: &Context,
+    msg: &Message,
+) -> Result<String, anyhow::Error> {
     fn generate(map: &std::collections::HashMap<UserId, u64>) -> String {
         let mut result = "uid,value".to_owned();
         for (k, v) in map {
@@ -127,14 +132,16 @@ async fn generate_csv(args: &[&str], this: &mut Handler, ctx: &Context, msg: &Me
     let data = match args.get(0) {
         Some(&"receivers") => generate(&this.taters_got),
         Some(&"givers") => generate(&this.taters_given),
-        _ => return Err(anyhow!("Unknown report"))
+        _ => return Err(anyhow!("Unknown report")),
     };
     let attachment = AttachmentType::Bytes {
         data: data.into_bytes().into(),
         filename: "stats.csv".to_owned(),
     };
 
-    msg.channel_id.send_files(&ctx.http, Some(attachment), |m| m).await?;
+    msg.channel_id
+        .send_files(&ctx.http, Some(attachment), |m| m)
+        .await?;
 
     Ok(String::new())
 }
@@ -207,7 +214,10 @@ fn set_potato(args: &[&str], this: &mut Handler) -> Result<String, anyhow::Error
     let potato_react = ReactionType::try_from(*emoji)?;
     let old_react = this.config.tater_emoji.to_string();
     this.config.tater_emoji = potato_react;
-    Ok(format!("Set potato emoji to {} (from {})", emoji, old_react))
+    Ok(format!(
+        "Set potato emoji to {} (from {})",
+        emoji, old_react
+    ))
 }
 
 fn admin(args: &[&str], this: &mut Handler) -> Result<String, anyhow::Error> {
@@ -320,15 +330,13 @@ People with any role with an Administrator privilege are always admins of this b
         "set_threshold" if is_admin => set_threshold(args, this),
         "blacklist" if is_admin => blacklist(args, this),
         "unblacklist" if is_admin => unblacklist(args, this),
-        "show_blacklist" if is_admin => {
-            Ok(this
-                .config
-                .blacklisted_channels
-                .iter()
-                .map(|c| format!("- {}", c.mention()))
-                .collect::<Vec<_>>()
-                .join("\n"))
-        }
+        "show_blacklist" if is_admin => Ok(this
+            .config
+            .blacklisted_channels
+            .iter()
+            .map(|c| format!("- {}", c.mention()))
+            .collect::<Vec<_>>()
+            .join("\n")),
         "set_potato" if is_admin => set_potato(args, this),
         "admin" if is_admin => admin(args, this),
         "unadmin" if is_admin => unadmin(args, this),
@@ -344,7 +352,7 @@ People with any role with an Administrator privilege are always admins of this b
             };
             msg
         }
-        _ => Ok(String::new())
+        _ => Ok(String::new()),
     };
 
     match res {
@@ -352,10 +360,13 @@ People with any role with an Administrator privilege are always admins of this b
             if !msg.is_empty() {
                 message.channel_id.say(&ctx.http, msg).await?;
             }
-        },
+        }
         Err(e) => {
-            message.channel_id.say(&ctx.http, format!("An error occured: \n{}", e)).await?;
-        },
+            message
+                .channel_id
+                .say(&ctx.http, format!("An error occured: \n{}", e))
+                .await?;
+        }
     }
 
     if is_admin {
