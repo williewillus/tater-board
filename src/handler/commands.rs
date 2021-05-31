@@ -9,6 +9,7 @@ use serenity::{
         channel::Message,
         channel::ReactionType,
         id::{ChannelId, UserId},
+        interactions::Interaction,
         Permissions,
     },
     prelude::*,
@@ -18,11 +19,10 @@ use super::{Handler, HandlerWrapper};
 
 async fn generate_leaderboard(
     leaderboard: &str,
-    args: &[&str],
+    page_num: usize, // 1-indexed
     this: &mut Handler,
-    ctx: &Context,
-    message: &Message,
-) -> Result<String, anyhow::Error> {
+    user_id: UserId,
+) -> Result<(String, String, String), anyhow::Error> {
     const PAGE_SIZE: usize = 10;
     let map = if leaderboard == "receivers" {
         &this.taters_got
@@ -31,12 +31,7 @@ async fn generate_leaderboard(
     };
 
     let total_pages = map.len() / PAGE_SIZE + 1;
-    let page_num = args
-        .get(0)
-        .and_then(|page| page.parse().ok())
-        .unwrap_or(1)
-        .max(1)
-        .min(total_pages);
+    let page_num = page_num.max(1).min(total_pages);
 
     // high score at the front
     let mut scores: Vec<_> = map.iter().map(|(id, count)| (*id, *count)).collect();
@@ -79,7 +74,7 @@ async fn generate_leaderboard(
         .iter()
         .enumerate()
         .filter_map(|(idx, (id, score))| {
-            if *id == message.author.id {
+            if *id == user_id {
                 Some((idx + 1, score))
             } else {
                 None
@@ -100,18 +95,7 @@ async fn generate_leaderboard(
         total_pages
     );
 
-    message
-        .channel_id
-        .send_message(&ctx.http, |m| {
-            m.embed(|e| {
-                e.title(format!("Leaderboard - Taters {}", verb))
-                    .description(&board)
-                    .footer(|f| f.text(footer))
-            })
-        })
-        .await?;
-
-    Ok(String::new())
+    return Ok((format!("Leaderboard - Taters {}", verb), board, footer));
 }
 
 async fn generate_csv(
@@ -255,6 +239,55 @@ async fn list_admins(this: &mut Handler) -> Result<String, anyhow::Error> {
     Ok(msg)
 }
 
+pub async fn handle_slash_command(
+    wrapper: &HandlerWrapper,
+    ctx: Context,
+    interaction: Interaction,
+) -> Result<(), anyhow::Error> {
+    let guild_id = *interaction
+        .guild_id
+        .as_ref()
+        .ok_or_else(|| anyhow!("no guild"))?;
+    let user_id = interaction
+        .member
+        .as_ref()
+        .map(|m| m.user.id)
+        .ok_or_else(|| anyhow!("no member"))?;
+
+    let mut handlers = wrapper.handlers.lock().await;
+    let handler = handlers.entry(guild_id).or_insert_with(Handler::new);
+
+    let data = interaction
+        .data
+        .as_ref()
+        .expect("Caller checked for slash command, so this must be here");
+    match data.name.as_str() {
+        "receivers" | "givers" => {
+            let value = data
+                .options
+                .get(0)
+                .map(|o| o.value.as_ref().map(|v| v.as_u64()).flatten())
+                .flatten()
+                .unwrap_or(1);
+            let (title, description, footer) =
+                generate_leaderboard(data.name.as_str(), value as usize, handler, user_id).await?;
+            interaction
+                .create_interaction_response(&ctx.http, |r| {
+                    r.interaction_response_data(|d| {
+                        d.embed(|e| {
+                            e.title(title)
+                                .description(description)
+                                .footer(|f| f.text(footer))
+                        })
+                    })
+                })
+                .await?;
+            Ok(())
+        }
+        _ => Err(anyhow!("Unknown command")),
+    }
+}
+
 pub async fn handle_commands(
     wrapper: &HandlerWrapper,
     ctx: &Context,
@@ -323,7 +356,20 @@ People with any role with an Administrator privilege are always admins of this b
             Ok(res)
         }
         leaderboard @ "receivers" | leaderboard @ "givers" => {
-            generate_leaderboard(leaderboard, args, this, ctx, message).await
+            let page = args.get(0).and_then(|page| page.parse().ok()).unwrap_or(1);
+            let (title, description, footer) =
+                generate_leaderboard(leaderboard, page, this, message.author.id).await?;
+            message
+                .channel_id
+                .send_message(&ctx.http, |m| {
+                    m.embed(|e| {
+                        e.title(title)
+                            .description(description)
+                            .footer(|f| f.text(footer))
+                    })
+                })
+                .await?;
+            Ok(String::new())
         }
         "csv" if is_admin => generate_csv(args, this, ctx, message).await,
         "set_pin_channel" if is_admin => set_pin_channel(args, this),

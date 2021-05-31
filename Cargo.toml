@@ -27,4 +27,5 @@ features = [
     "model",
     "utils",
     "rustls_backend",
+    "unstable_discord_api",
 ]

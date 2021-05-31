@@ -23,6 +23,7 @@ use serenity::{
         id::GuildId,
         id::MessageId,
         id::{EmojiId, UserId},
+        interactions::{Interaction, InteractionType},
     },
     prelude::*,
 };
@@ -399,6 +400,14 @@ impl EventHandler for HandlerWrapper {
         let res = commands::handle_commands(self, &ctx, uid, &message).await;
         if let Err(oh_no) = res {
             log::error!("`message`: {:?}", oh_no);
+        }
+    }
+
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        if interaction.kind == InteractionType::ApplicationCommand {
+            if let Err(e) = commands::handle_slash_command(self, ctx, interaction).await {
+                log::error!("Handling slash command: {}", e);
+            }
         }
     }
 }
