@@ -26,6 +26,6 @@ features = [
     "http",
     "model",
     "utils",
-    "rustls_backend",
+    "native_tls_backend",
     "unstable_discord_api",
 ]
