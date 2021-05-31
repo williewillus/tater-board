@@ -1,5 +1,6 @@
 mod handler;
 
+use anyhow::Context;
 use std::{env, error::Error, path::PathBuf};
 
 use handler::HandlerWrapper;
@@ -11,7 +12,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init_from_env(env_logger::Env::default());
     log::info!("taterboard v{} initializing", env!("CARGO_PKG_VERSION"));
 
-    let token = env::var("TATERBOARD_TOKEN").expect("expected bot token at env `TATERBOARD_TOKEN`");
+    let token = env::var("TATERBOARD_TOKEN").context("Missing bot token")?;
+    let app_id = env::var("APP_ID").context("Missing app id")?;
+    let app_id = app_id.parse::<u64>().context("Malformed app id")?;
     let path_to_save = env::args()
         .nth(1)
         .expect("must provide path to directory to save json");
@@ -28,6 +31,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 | GatewayIntents::GUILD_MESSAGE_REACTIONS,
         )
         .event_handler(HandlerWrapper::new(path_to_save)?)
+        .application_id(app_id)
         .await?;
 
     ApplicationCommand::create_global_application_commands(
