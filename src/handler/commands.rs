@@ -261,6 +261,7 @@ pub async fn handle_slash_command(
         .data
         .as_ref()
         .expect("Caller checked for slash command, so this must be here");
+    log::debug!("Slash command id {}, name {}", data.id, data.name);
     match data.name.as_str() {
         "receivers" | "givers" => {
             let value = data
