@@ -73,14 +73,13 @@ async fn generate_leaderboard(
     let asker_place = scores
         .iter()
         .enumerate()
-        .filter_map(|(idx, (id, score))| {
+        .find_map(|(idx, (id, score))| {
             if *id == user_id {
                 Some((idx + 1, score))
             } else {
                 None
             }
-        })
-        .next();
+        });
     let (place, score) = match asker_place {
         Some((p, s)) => (p.to_string(), s.to_string()),
         None => ("?".to_string(), "?".to_string()),
