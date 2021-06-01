@@ -48,9 +48,9 @@ async fn generate_leaderboard(
 
     let mut board = String::with_capacity(20 * PAGE_SIZE);
     let verb = if leaderboard == "receivers" {
-        "received"
+        "Received"
     } else {
-        "given"
+        "Given"
     };
     for (idx, (user_id, count)) in to_display {
         let medal = match idx + 1 {
@@ -86,11 +86,10 @@ async fn generate_leaderboard(
         None => ("?".to_string(), "?".to_string()),
     };
     let footer = format!(
-        "Your place: #{}/{} with {}x {} | Page {}/{}",
+        "Your place: #{}/{} with {}x taters | Page {}/{}",
         place,
         map.len(),
         score,
-        this.config.tater_emoji.to_string(),
         page_num,
         total_pages
     );
@@ -333,10 +332,6 @@ pub async fn handle_commands(
 
     let res = match cmd {
         "help" => {
-            const HELP: &str = r" === PotatoBoard Help ===
-- `help`: Get this message.
-- `receivers <page_number>`: See the most protatolific receivers of potatoes. `page_number` is optional.
-- `givers <page_number>`: See the most protatolific givers of potatoes. `page_number` is optional.";
             const ADMIN_HELP: &str = r"You're an admin! Here's the admin commands:
 - `set_pin_channel <channel_id>`: Set the channel that pinned messages to go, and adds it to the potato blacklist.
 - `set_potato <emoji>`: Set the given emoji to be the operative one.
@@ -349,28 +344,11 @@ pub async fn handle_commands(
 - `list_admins`: Print a list of admins.
 - `save`: Flush any in-memory state to disk.
 People with any role with an Administrator privilege are always admins of this bot.";
-            let mut res = HELP.to_owned();
             if is_admin {
-                res.push('\n');
-                res.push_str(ADMIN_HELP);
+                Ok(ADMIN_HELP.to_owned())
+            } else {
+                Ok(String::new())
             }
-            Ok(res)
-        }
-        leaderboard @ "receivers" | leaderboard @ "givers" => {
-            let page = args.get(0).and_then(|page| page.parse().ok()).unwrap_or(1);
-            let (title, description, footer) =
-                generate_leaderboard(leaderboard, page, this, message.author.id).await?;
-            message
-                .channel_id
-                .send_message(&ctx.http, |m| {
-                    m.embed(|e| {
-                        e.title(title)
-                            .description(description)
-                            .footer(|f| f.text(footer))
-                    })
-                })
-                .await?;
-            Ok(String::new())
         }
         "csv" if is_admin => generate_csv(args, this, ctx, message).await,
         "set_pin_channel" if is_admin => set_pin_channel(args, this),
